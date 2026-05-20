@@ -1,0 +1,1 @@
+# seiyu-data-parser
