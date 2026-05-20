@@ -9,20 +9,23 @@ TARGET_CATEGORIES = [
 
 def extract_title_and_categories(page_xml: str) -> Tuple[str, List[str]]:
     """
-    Parse a <page> XML string and return (title, [matched category names]).
-    Matches if the page text contains '[[Category:日本の男性声優' or
-    '[[Category:日本の女性声優' (allowing for pipes and extra text).
+    Robustly parse a <page> XML string and return (title, [matched category names]).
+    Handles XML namespaces by matching local-name of tags.
     """
     try:
         root = ET.fromstring(page_xml)
     except ET.ParseError:
         return ("", [])
 
-    title_elem = root.find('title')
-    title = (title_elem.text or "").strip() if title_elem is not None else ""
-
-    text_elem = root.find('.//text')
-    text = text_elem.text or "" if text_elem is not None else ""
+    title = ""
+    text = ""
+    # find title and text elements by local-name to avoid namespace issues
+    for elem in root.iter():
+        tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+        if tag == "title" and elem.text:
+            title = elem.text.strip()
+        elif tag == "text" and elem.text:
+            text = elem.text
 
     matched: List[str] = []
     for cat in TARGET_CATEGORIES:
