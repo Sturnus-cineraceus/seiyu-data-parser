@@ -22,3 +22,19 @@ python seiyu_data_parser.py /path/to/wikipedia-dump.bz2 -o output.json
 - `--exclude-media`: 出力から除外したいメディア名を追加できます
 
 標準でも、いくつかの非対象メディアはあらかじめ除外されます。
+
+## SQLite への取り込み
+
+生成済みの `voice_actor.json` から SQLite ファイルを作れます。
+
+```bash
+python seiyu_data_parser_sqlite.py voice_actor.json -o voice_actor.sqlite3
+```
+
+作成されるテーブル:
+
+- `voice_actors`
+- `works`
+- `voice_actor_work_mappings`
+
+マッピングには声優、作品、年が入ります。
