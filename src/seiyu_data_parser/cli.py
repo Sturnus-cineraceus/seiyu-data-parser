@@ -98,11 +98,14 @@ def main():
                                     entry = {k: v for k, v in w.items() if k != "media"}
                                     grouped.setdefault(media, []).append(entry)
                                 actor["works"] = [{"media": m, "credits": c} for m, c in grouped.items()]
-                            # write actor JSON into stream, manage commas
-                            line = json.dumps(actor, ensure_ascii=False)
+                            # write actor JSON into stream, manage commas, pretty-print
+                            actor_json = json.dumps(actor, ensure_ascii=False, indent=2)
+                            indented = '\n'.join('  ' + l for l in actor_json.splitlines())
                             if not first:
                                 outfh.write(",\n")
-                            outfh.write(line)
+                            outfh.write(indented)
+                            # show progress: output completed actor name to stdout
+                            print(actor.get("name", ""), flush=True)
                             first = False
                         outfh.flush()
                         buffer.clear()
@@ -128,10 +131,14 @@ def main():
                             entry = {k: v for k, v in w.items() if k != "media"}
                             grouped.setdefault(media, []).append(entry)
                         actor["works"] = [{"media": m, "credits": c} for m, c in grouped.items()]
-                    line = json.dumps(actor, ensure_ascii=False)
+                    # write actor JSON into stream, pretty-print
+                    actor_json = json.dumps(actor, ensure_ascii=False, indent=2)
+                    indented = '\n'.join('  ' + l for l in actor_json.splitlines())
                     if not first:
                         outfh.write(",\n")
-                    outfh.write(line)
+                    outfh.write(indented)
+                    # show progress: output completed actor name to stdout
+                    print(actor.get("name", ""), flush=True)
                     first = False
                 outfh.flush()
                 buffer.clear()
