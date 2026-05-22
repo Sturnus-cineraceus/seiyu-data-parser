@@ -220,3 +220,5 @@ __marimo__/
 
 /data/*
 CLINE_RULES.md
+*.json
+*.tmp
