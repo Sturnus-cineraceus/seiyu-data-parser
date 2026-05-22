@@ -95,10 +95,6 @@ def main():
                 scanned += 1
                 title, cats = extract.extract_title_and_categories(page_xml)
                 if cats:
-                    # write raw page XML to debug file
-                    with open("data/debug_data.txt", "a", encoding="utf-8") as df:
-                        df.write(page_xml + "\n\n")
-                    # extract "== 出演 ==" section and write raw section text to debug_detail.txt
                     section = extract.extract_section(page_xml, "出演")
                     if section:
                         with open("data/debug_detail.txt", "a", encoding="utf-8") as ddf:
