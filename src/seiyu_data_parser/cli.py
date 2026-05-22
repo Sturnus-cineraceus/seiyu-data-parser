@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import re
 from typing import Any, Dict, List
 from .io import open_bz2
 from .wikistream import iter_pages
@@ -12,6 +13,22 @@ def _normalize_media(s: str) -> str:
         return ""
     # Normalize common punctuation and full-width spaces; keep case as-is for Japanese.
     return s.replace('、', ',').replace('　', ' ').strip()
+
+
+def _strip_parenthetical(title: str) -> str:
+    """Remove half-width and full-width parentheses and their contents from a wiki title.
+
+    Examples:
+    - "くじら (声優)" -> "くじら"
+    - "名前（補足）" -> "名前"
+    """
+    if not isinstance(title, str):
+        return ""
+    # remove half-width parentheses and contents
+    title = re.sub(r'\s*\(.*?\)', '', title)
+    # remove full-width parentheses and contents
+    title = re.sub(r'\s*（.*?）', '', title)
+    return title.strip()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="seiyu data parser")
@@ -87,7 +104,7 @@ def main():
                         with open("data/debug_detail.txt", "a", encoding="utf-8") as ddf:
                             ddf.write(section + "\n\n")
                     works = extract.parse_works_section(section)
-                    result_item: Dict[str, Any] = {"name": title, "wiki_title": title}
+                    result_item: Dict[str, Any] = {"name": _strip_parenthetical(title), "wiki_title": title}
                     if works:
                         result_item["works"] = works
 
