@@ -33,7 +33,7 @@ def _strip_parenthetical(title: str) -> str:
 def parse_args():
     parser = argparse.ArgumentParser(description="seiyu data parser")
     parser.add_argument("path", help="Path to .bz2 file (Wikipedia multistream dump)")
-    parser.add_argument("--limit", type=int, default=100, help="Max number of pages to scan and max number of matching pages to output")
+    parser.add_argument("--limit", type=int, default=None, help="Max number of pages to scan and max number of matching pages to output. If omitted, process all pages.")
     parser.add_argument("--output", "-o", default="voice_actor.json", help="Output JSON file path (default: ./voice_actor.json)")
     parser.add_argument(
         "--exclude-media",
@@ -76,8 +76,8 @@ def main():
         sys.exit(2)
     output_count = 0
     scanned = 0
-    max_scan = args.limit
-    max_output = args.limit
+    max_scan = args.limit if args.limit is not None else float('inf')
+    max_output = args.limit if args.limit is not None else float('inf')
 
     # batching / streaming output settings
     BATCH_SIZE = 30  # write every BATCH_SIZE actors
