@@ -31,7 +31,21 @@ def parse_args():
             "その他",
             "担当俳優",
             "CM",
-            "レコード、CD"
+            "レコード、CD",
+            "過去",
+            "現在",
+            "レギュラー",
+            "不定期",
+            "テレビ番組",
+            "特別番組",
+            "俳優",
+            "女優",
+            "担当女優",
+            "担当",
+            "映画（吹き替え）",
+            "吹き替え",
+            "テレビドラマ",
+            "ドラマ",
         ],
         help="Media names to exclude from output (can be specified multiple times). Defaults include common non-target media."
     )
