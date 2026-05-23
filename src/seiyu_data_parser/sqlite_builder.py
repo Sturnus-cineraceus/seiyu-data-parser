@@ -1,4 +1,6 @@
 import argparse
+import base64
+import hashlib
 import json
 import os
 import sqlite3
@@ -21,6 +23,14 @@ def _normalize_text(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     return value.strip()
+
+
+def _hash_wiki_title(wiki_title: str) -> Optional[str]:
+    wiki_title = _normalize_text(wiki_title)
+    if not wiki_title:
+        return None
+    digest = hashlib.blake2b(wiki_title.encode("utf-8"), digest_size=12).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
 def _normalize_year(value: Any) -> Optional[int]:
@@ -54,8 +64,12 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS voice_actors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
-            wiki_title TEXT
+            wiki_title TEXT,
+            wiki_title_hash TEXT
         );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_actors_wiki_title_hash
+            ON voice_actors(wiki_title_hash);
 
         CREATE TABLE IF NOT EXISTS works (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,18 +109,20 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     if not name:
         raise ValueError("voice actor name is required")
     wiki_title = _normalize_text(actor.get("wiki_title")) or None
+    wiki_title_hash = _hash_wiki_title(wiki_title) if wiki_title else None
     conn.execute(
-        "INSERT OR IGNORE INTO voice_actors(name, wiki_title) VALUES (?, ?)",
-        (name, wiki_title),
+        "INSERT OR IGNORE INTO voice_actors(name, wiki_title, wiki_title_hash) VALUES (?, ?, ?)",
+        (name, wiki_title, wiki_title_hash),
     )
     if wiki_title:
         conn.execute(
             """
             UPDATE voice_actors
-               SET wiki_title = COALESCE(NULLIF(wiki_title, ''), ?)
+               SET wiki_title = COALESCE(NULLIF(wiki_title, ''), ?),
+                   wiki_title_hash = COALESCE(NULLIF(wiki_title_hash, ''), ?)
              WHERE name = ?
             """,
-            (wiki_title, name),
+            (wiki_title, wiki_title_hash, name),
         )
     return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ?", (name,))
 
