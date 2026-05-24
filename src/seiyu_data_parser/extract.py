@@ -222,7 +222,7 @@ def _parse_item_line(line: str):
 def parse_works_section(section_text: str):
     """
     Parse the raw '出演' section text and return a list of works:
-    [{"media": "...", "title": "...", "roles": ["r1","r2"], "year": 1979}, ...]
+    [{"media": "...", "title": "...", "wiki_title": "...", "roles": ["r1","r2"], "year": 1979}, ...]
     The "year" field is an integer when present, otherwise an empty string "".
     """
     if not section_text:
@@ -262,11 +262,12 @@ def parse_works_section(section_text: str):
             # ignore empty titles
             if not title:
                 continue
+            wiki_title = link or title
             year_val = current_year if current_year is not None else ""
             results.append({
                 "media": media,
                 "title": title,
-                "link": link,
+                "wiki_title": wiki_title,
                 "roles": roles,
                 "year": year_val
             })

@@ -75,7 +75,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             media TEXT NOT NULL,
             title TEXT NOT NULL,
-            UNIQUE(media, title)
+            wiki_title TEXT NOT NULL UNIQUE
         );
 
         CREATE TABLE IF NOT EXISTS voice_actor_work_mappings (
@@ -127,12 +127,26 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ?", (name,))
 
 
-def _upsert_work(conn: sqlite3.Connection, media: str, title: str) -> int:
+def _upsert_work(conn: sqlite3.Connection, media: str, title: str, wiki_title: str) -> int:
+    title = _normalize_text(title)
+    wiki_title = _normalize_text(wiki_title) or title
+    if not title or not wiki_title:
+        raise ValueError("work title is required")
     conn.execute(
-        "INSERT OR IGNORE INTO works(media, title) VALUES (?, ?)",
-        (media, title),
+        "INSERT OR IGNORE INTO works(media, title, wiki_title) VALUES (?, ?, ?)",
+        (media, title, wiki_title),
     )
-    return _get_id(conn, "SELECT id FROM works WHERE media = ? AND title = ?", (media, title))
+    if title:
+        conn.execute(
+            """
+            UPDATE works
+               SET title = COALESCE(NULLIF(title, ''), ?),
+                   media = COALESCE(NULLIF(media, ''), ?)
+             WHERE wiki_title = ?
+            """,
+            (title, media, wiki_title),
+        )
+    return _get_id(conn, "SELECT id FROM works WHERE wiki_title = ?", (wiki_title,))
 
 
 def _iter_credits(works: Any) -> Iterable[Dict[str, Any]]:
@@ -166,9 +180,10 @@ def build_sqlite(input_json: str, output_db: str) -> None:
             for credit in _iter_credits(works):
                 media = _normalize_text(credit.get("media"))
                 title = _normalize_text(credit.get("title"))
-                if not media or not title:
+                wiki_title = _normalize_text(credit.get("wiki_title")) or title
+                if not media or not title or not wiki_title:
                     continue
-                work_id = _upsert_work(conn, media, title)
+                work_id = _upsert_work(conn, media, title, wiki_title)
                 year = _normalize_year(credit.get("year"))
                 conn.execute(
                     """
