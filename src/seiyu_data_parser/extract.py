@@ -68,6 +68,31 @@ def _clean_text(s: str) -> str:
     s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
     return s.strip()
 
+
+def _normalize_media(media: str) -> str:
+    """Clean and normalize media heading strings.
+
+    - Strip HTML tags and simple templates
+    - Normalize punctuation and spaces
+    - Map various variants to canonical values (特撮, ゲーム, CM)
+    """
+    if not isinstance(media, str):
+        return ""
+    m = media
+    m = re.sub(r'<.*?>', '', m)
+    m = re.sub(r'\{\{.*?\}\}', '', m, flags=re.S)
+    m = m.replace('、', ',').replace('　', ' ').strip()
+    # Normalize various '特撮' variants to canonical '特撮'
+    if '特撮' in m or '特攝' in m:
+        return '特撮'
+    # CM precedence: if media mentions CM, normalize to 'CM'
+    if 'CM' in m or 'ＣＭ' in m:
+        return 'CM'
+    # Treat any media that contains 'ゲーム' as a game
+    if 'ゲーム' in m:
+        return 'ゲーム'
+    return m
+
 _link_re = re.compile(r'\[\[([^|\]]+?)(?:\|([^]]+?))?\]\]')
 
 # 役名の先頭に付く「主演・」等の表記を除去するための正規化用正規表現（先頭のみ）
@@ -208,6 +233,8 @@ def parse_works_section(section_text: str):
     year_re = re.compile(r'^\|\s*(\d{4})\s*年')
     results = []
     for media, block in blocks:
+        # normalize media heading (remove HTML, map games and CM)
+        media = _normalize_media(media)
         current_year = None
         for line in block.splitlines():
             # detect year-def lines like: | 1979年 |

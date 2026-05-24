@@ -19,7 +19,6 @@ python seiyu_data_parser.py /path/to/wikipedia-dump.bz2 -o output.json
 ## 主なオプション
 
 - `--limit`: 走査するページ数と出力件数の上限を指定します
-- `--exclude-media`: 出力から除外したいメディア名を追加できます
 
 標準でも、いくつかの非対象メディアはあらかじめ除外されます。
 

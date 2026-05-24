@@ -11,8 +11,50 @@ from . import extract
 def _normalize_media(s: str) -> str:
     if not isinstance(s, str):
         return ""
+    # remove HTML tags and simple templates
+    s = re.sub(r'<.*?>', '', s)
+    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
     # Normalize common punctuation and full-width spaces; keep case as-is for Japanese.
-    return s.replace('、', ',').replace('　', ' ').strip()
+    s = s.replace('、', ',').replace('　', ' ').strip()
+    # Normalize various '特撮' variants to canonical '特撮'
+    if '特撮' in s or '特攝' in s:
+        return '特撮'
+    # If media contains CM (full-width or ASCII), normalize to 'CM' so it matches the exclude set
+    if 'CM' in s or 'ＣＭ' in s:
+        return 'CM'
+    # If the string contains ゲーム, treat it as a game
+    if 'ゲーム' in s:
+        return 'ゲーム'
+    return s
+
+
+EXCLUDE_MEDIA: List[str] = [
+    "バラエティ",
+    "ラジオ",
+    "舞台",
+    "その他コンテンツ",
+    "CD",
+    "その他",
+    "担当俳優",
+    "CM",
+    "レコード、CD",
+    "過去",
+    "現在",
+    "レギュラー",
+    "不定期",
+    "テレビ番組",
+    "特別番組",
+    "俳優",
+    "女優",
+    "担当女優",
+    "担当",
+    "映画（吹き替え）",
+    "吹き替え",
+    "テレビドラマ",
+    "ドラマ",
+]
+
+EXCLUDE_MEDIA_SET: frozenset = frozenset(_normalize_media(m) for m in EXCLUDE_MEDIA)
 
 
 def _strip_parenthetical(title: str) -> str:
@@ -35,37 +77,6 @@ def parse_args():
     parser.add_argument("path", help="Path to .bz2 file (Wikipedia multistream dump)")
     parser.add_argument("--limit", type=int, default=None, help="Max number of pages to scan and max number of matching pages to output. If omitted, process all pages.")
     parser.add_argument("--output", "-o", default="voice_actor.json", help="Output JSON file path (default: ./voice_actor.json)")
-    parser.add_argument(
-        "--exclude-media",
-        "-e",
-        action="append",
-        default=[
-            "バラエティ",
-            "ラジオ",
-            "舞台",
-            "その他コンテンツ",
-            "CD",
-            "その他",
-            "担当俳優",
-            "CM",
-            "レコード、CD",
-            "過去",
-            "現在",
-            "レギュラー",
-            "不定期",
-            "テレビ番組",
-            "特別番組",
-            "俳優",
-            "女優",
-            "担当女優",
-            "担当",
-            "映画（吹き替え）",
-            "吹き替え",
-            "テレビドラマ",
-            "ドラマ",
-        ],
-        help="Media names to exclude from output (can be specified multiple times). Defaults include common non-target media."
-    )
     return parser.parse_args()
 
 def main():
@@ -112,7 +123,7 @@ def main():
                         # prepare grouped entries and write batch
                         for actor in buffer:
                             # apply grouping/exclusion (same logic as before)
-                            exclude_set = set(_normalize_media(m) for m in (args.exclude_media or []) if isinstance(m, str))
+                            exclude_set = EXCLUDE_MEDIA_SET
                             works = actor.get("works")
                             if works:
                                 grouped = {}
@@ -144,7 +155,7 @@ def main():
 
             # write any remaining buffered actors
             if buffer:
-                exclude_set = set(_normalize_media(m) for m in (args.exclude_media or []) if isinstance(m, str))
+                exclude_set = EXCLUDE_MEDIA_SET
                 for actor in buffer:
                     works = actor.get("works")
                     if works:
