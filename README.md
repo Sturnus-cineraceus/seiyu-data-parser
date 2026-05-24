@@ -37,5 +37,6 @@ python seiyu_data_parser_sqlite.py voice_actor.json -o voice_actor.sqlite3
 - `voice_actor_work_mappings`
 
 `voice_actors` には URL 用の `wiki_title_hash` も含まれ、`wiki_title_hash` にユニークインデックスが張られます。
+`works` は `wiki_title` を一意キーとして扱い、`title` には表示用の作品名を保持します。
 
 マッピングには声優、作品、年が入ります。
