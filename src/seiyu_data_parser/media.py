@@ -60,7 +60,7 @@ EXCLUDE_MEDIA_CONTAINS = (
 )
 
 
-def _normalize_media(s: str) -> str:
+def _normalize_media_initial(s: str) -> str:
     if not isinstance(s, str):
         return ""
     m = s
@@ -116,9 +116,19 @@ def _normalize_media(s: str) -> str:
     return m
 
 
+def _normalize_media_final(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    m = s
+    # Final normalization: canonicalize any media containing 'その他' to 'その他'
+    if 'その他' in m:
+        return 'その他'
+    return m
+
+
 # Derived exclusion helpers built from the canonical constant groups above.
-# Exact normalized set for quick equality checks.
-EXCLUDE_MEDIA_SET = frozenset(_normalize_media(m) for m in EXCLUDE_MEDIA_EXACT)
+# Exact normalized set for quick equality checks (use initial normalization here).
+EXCLUDE_MEDIA_SET = frozenset(_normalize_media_initial(m) for m in EXCLUDE_MEDIA_EXACT)
 
 # All tokens treated as substring (任意位置部分一致) for exclusion.
 EXCLUDE_CONTAINS = tuple(EXCLUDE_MEDIA_CONTAINS)
@@ -142,14 +152,16 @@ def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(w, dict):
             continue
         media_raw = w.get("media")
-        nm = _normalize_media(media_raw) if isinstance(media_raw, str) else ""
-        # Skip excluded media by exact normalized set.
-        if nm in EXCLUDE_MEDIA_SET:
+        nm_initial = _normalize_media_initial(media_raw) if isinstance(media_raw, str) else ""
+        # Exact normalized exclusion (first)
+        if nm_initial in EXCLUDE_MEDIA_SET:
             continue
-        # Skip if any exclusion token appears anywhere in the normalized media string (substring match).
-        if any(tok in nm for tok in EXCLUDE_CONTAINS):
+        # Substring exclusion against the initial normalized value (second)
+        if any(tok in nm_initial for tok in EXCLUDE_CONTAINS):
             continue
-        media_key = nm or (media_raw or "Unknown")
+        # Final normalization (e.g., map 'その他' to canonical 'その他')
+        nm_final = _normalize_media_final(nm_initial) or (media_raw or "Unknown")
+        media_key = nm_final
         entry = {k: v for k, v in w.items() if k != "media"}
         grouped.setdefault(media_key, []).append(entry)
 
