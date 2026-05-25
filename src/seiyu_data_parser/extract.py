@@ -33,7 +33,7 @@ def extract_title_and_categories(page_xml: str) -> Tuple[str, List[str]]:
             matched.append(cat)
     return title, matched
 
-def extract_section(page_xml: str, section_name: str = "出演") -> str:
+def extract_section(page_xml: str, section_name: str = "出演") -> Tuple[str, int]:
     """
     Extract the raw wiki-markup text under a top-level section header like:
     == 出演 ==
@@ -51,11 +51,19 @@ def extract_section(page_xml: str, section_name: str = "出演") -> str:
             text = elem.text
             break
     if not text:
-        return ""
-    # Match from a level-2 header "== section_name ==" to the next level-2 header (or EOF)
-    pattern = rf"(?ms)^[=]{{2}}\s*{re.escape(section_name)}\s*[=]{{2}}\s*\n(.*?)(?=^[=]{{2}}\s.*[=]{{2}}|\Z)"
-    m = re.search(pattern, text)
-    return m.group(1) if m else ""
+        return "", 0
+    # Find the section header at any level (>=2). Capture its level (number of '=').
+    header_re = re.compile(r'(?m)^(?P<underline>={2,})\s*' + re.escape(section_name) + r'\s*(?P=underline)\s*$')
+    m = header_re.search(text)
+    if not m:
+        return "", 0
+    level = len(m.group('underline'))
+    start = m.end()
+    # Find the next header with the same level to bound the section, if any
+    next_re = re.compile(r'(?m)^[=]{' + str(level) + r'}\s.*[=]{' + str(level) + r'}\s*$')
+    nm = next_re.search(text, start)
+    body = text[start:nm.start()] if nm else text[start:]
+    return body, level
 
 def _clean_text(s: str) -> str:
     # remove ref tags
@@ -119,24 +127,68 @@ def _extract_unwrapped_and_link(s: str):
     unwrapped = _link_re.sub(repl, s)
     return unwrapped, first_link or ""
 
-def _split_media_blocks(text: str):
+def _split_media_blocks(text: str, parent_level: int = None):
     """
     Return list of (media_name, block_text). If no level-3+ headings found,
     return a single block with media "出演".
     """
-    heading_re = re.compile(r'(?m)^(?P<underline>={3,})\s*(?P<media>[^=]+?)\s*(?P=underline)\s*$')
+    # Find all headings with level >= 3 and record their level and positions.
     blocks = []
+    # If a parent_level is provided (level of the containing '出演' header),
+    # treat media headings as one deeper than that (出演_level + 1).
+    if parent_level is not None and parent_level > 0:
+        media_level = parent_level + 1
+        heading_re = re.compile(r'(?m)^(?P<underline>={' + str(media_level) + r'})\s*(?P<media>[^=]+?)\s*(?P=underline)\s*$')
+        matches = list(heading_re.finditer(text))
+        if not matches:
+            # No media-level headings: treat whole section as '出演'
+            if text.strip():
+                blocks.append(("出演", text))
+            return blocks
+        last_pos = 0
+        last_media = None
+        for m in matches:
+            if last_media is None:
+                before = text[last_pos:m.start()]
+                if before.strip():
+                    blocks.append(("出演", before))
+            else:
+                blocks.append((last_media, text[last_pos:m.start()]))
+            last_media = m.group('media').strip()
+            last_pos = m.end()
+        # append tail
+        if last_media is None:
+            if text.strip():
+                blocks.append(("出演", text))
+        else:
+            blocks.append((last_media, text[last_pos:]))
+        return blocks
+
+    # Fallback: no parent_level provided — preserve previous behavior (use minimal heading level >=3)
+    heading_re = re.compile(r'(?m)^(?P<underline>={3,})\s*(?P<media>[^=]+?)\s*(?P=underline)\s*$')
+    matches = list(heading_re.finditer(text))
+    if not matches:
+        if text.strip():
+            blocks.append(("出演", text))
+        return blocks
+    levels = [len(m.group('underline')) for m in matches]
+    min_level = min(levels)
     last_pos = 0
     last_media = None
-    for m in heading_re.finditer(text):
-        if last_media is None:
-            before = text[last_pos:m.start()]
-            if before.strip():
-                blocks.append(("出演", before))
+    for m in matches:
+        level = len(m.group('underline'))
+        name = m.group('media').strip()
+        if level == min_level:
+            if last_media is None:
+                before = text[last_pos:m.start()]
+                if before.strip():
+                    blocks.append(("出演", before))
+            else:
+                blocks.append((last_media, text[last_pos:m.start()]))
+            last_media = name
+            last_pos = m.end()
         else:
-            blocks.append((last_media, text[last_pos:m.start()]))
-        last_media = m.group('media').strip()
-        last_pos = m.end()
+            continue
     if last_media is None:
         if text.strip():
             blocks.append(("出演", text))
@@ -219,7 +271,7 @@ def _parse_item_line(line: str):
 
     return title, roles
 
-def parse_works_section(section_text: str):
+def parse_works_section(section_text: str, parent_level: int = None):
     """
     Parse the raw '出演' section text and return a list of works:
     [{"media": "...", "title": "...", "wiki_title": "...", "roles": ["r1","r2"], "year": 1979}, ...]
@@ -227,7 +279,7 @@ def parse_works_section(section_text: str):
     """
     if not section_text:
         return []
-    blocks = _split_media_blocks(section_text)
+    blocks = _split_media_blocks(section_text, parent_level=parent_level)
     # matches list item lines that start with one or more asterisks (allow leading spaces)
     item_re = re.compile(r'^\s*\*+\s*(.+)$')
     year_re = re.compile(r'^\|\s*(\d{4})\s*年')

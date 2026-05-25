@@ -93,6 +93,18 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                 work_id,
                 COALESCE(year, -1)
             );
+
+        -- New table to store role names for a given voice_actor_work_mappings entry.
+        -- A mapping (voice actor + work + optional year) can have multiple role names.
+        CREATE TABLE IF NOT EXISTS voice_actor_work_roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mapping_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            FOREIGN KEY (mapping_id) REFERENCES voice_actor_work_mappings(id) ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_actor_work_roles_unique
+            ON voice_actor_work_roles(mapping_id, role);
         """
     )
 
@@ -192,6 +204,22 @@ def build_sqlite(input_json: str, output_db: str) -> None:
                     """,
                     (actor_id, work_id, year),
                 )
+                # Fetch the mapping id (either newly inserted or existing) so roles can reference it
+                mapping_id = _get_id(
+                    conn,
+                    "SELECT id FROM voice_actor_work_mappings WHERE voice_actor_id = ? AND work_id = ? AND COALESCE(year, -1) = COALESCE(?, -1)",
+                    (actor_id, work_id, year),
+                )
+                # Insert role names (if any) associated with this mapping
+                roles = credit.get("roles", [])
+                if isinstance(roles, list):
+                    for role in roles:
+                        role_text = _normalize_text(role)
+                        if role_text:
+                            conn.execute(
+                                "INSERT OR IGNORE INTO voice_actor_work_roles(mapping_id, role) VALUES (?, ?)",
+                                (mapping_id, role_text),
+                            )
         conn.commit()
 
 

@@ -106,11 +106,11 @@ def main():
                 scanned += 1
                 title, cats = extract.extract_title_and_categories(page_xml)
                 if cats:
-                    section = extract.extract_section(page_xml, "出演")
+                    section, level = extract.extract_section(page_xml, "出演")
                     if section:
                         with open("data/debug_detail.txt", "a", encoding="utf-8") as ddf:
                             ddf.write(section + "\n\n")
-                    works = extract.parse_works_section(section)
+                    works = extract.parse_works_section(section, parent_level=level)
                     result_item: Dict[str, Any] = {"name": _strip_parenthetical(title), "wiki_title": title}
                     if works:
                         result_item["works"] = works
