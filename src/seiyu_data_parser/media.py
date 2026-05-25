@@ -6,11 +6,11 @@ and groups works into [{'media': ..., 'credits': [...]}, ...] to match existing 
 from typing import Dict, Any, List
 import re
 
-DEFAULT_EXCLUDE_MEDIA = [
+# Exact normalized media strings to exclude (exact normalized match).
+EXCLUDE_MEDIA_EXACT = [
     "バラエティ",
     "イベント",
     "ラジオ",
-    "舞台",
     "その他コンテンツ",
     "CD",
     "その他",
@@ -31,7 +31,29 @@ DEFAULT_EXCLUDE_MEDIA = [
     "吹き替え",
     "テレビドラマ",
     "ドラマ",
+    # Note: tokens that should be matched by substring or bounded rules are defined below
 ]
+
+# Tokens to match when they appear anywhere in the media string (substring match).
+EXCLUDE_MEDIA_CONTAINS = (
+    "バラエティ",
+    "パチスロ",
+    "スロット",
+    "パチンコ",
+    "イベント",
+    "舞台",
+    "ミュージカル",
+    "ミュージック",
+    "司会",
+    "同人",
+    "雑誌",
+    "新聞",
+    "小説",
+    "広告",
+    "アパレル",
+    "アイドル",
+    "アイスショー",
+)
 
 
 def _normalize_media(s: str) -> str:
@@ -41,6 +63,20 @@ def _normalize_media(s: str) -> str:
     m = re.sub(r'<.*?>', '', m)
     m = re.sub(r'\{\{.*?\}\}', '', m, flags=re.S)
     m = m.replace('、', ',').replace('　', ' ').strip()
+    # normalize fullwidth CD to ASCII for matching
+    m = m.replace('ＣＤ', 'CD')
+
+    # Map various audio-related variants to a single canonical media 'オーディオドラマ'.
+    # Match common prefixes and tokens but avoid mapping lone 'CD' or generic 'ラジオ'.
+    audio_tokens = [
+        'オーディオドラマ', 'オーディオブック', 'オーディドラマ', 'オーディブック', 'オーディ',
+        'ボイスドラマ', 'ボイスブック', 'ボイスCD', 'ボイスＣＤ',
+        'カセットドラマ', 'カセットブック', 'カセット文庫', '朗読',
+        'ドラマCD', 'ドラマＣＤ', 'ラジオドラマ'
+    ]
+    if any(tok in m for tok in audio_tokens):
+        return 'オーディオドラマ'
+
     if '特撮' in m or '特攝' in m:
         return '特撮'
     if 'CM' in m or 'ＣＭ' in m:
@@ -64,14 +100,12 @@ def _normalize_media(s: str) -> str:
     return m
 
 
-EXCLUDE_MEDIA_SET = frozenset(_normalize_media(m) for m in DEFAULT_EXCLUDE_MEDIA)
+# Derived exclusion helpers built from the canonical constant groups above.
+# Exact normalized set for quick equality checks.
+EXCLUDE_MEDIA_SET = frozenset(_normalize_media(m) for m in EXCLUDE_MEDIA_EXACT)
 
-# Additional exclude substrings/patterns for fuzzy matching (compiled for performance).
-EXCLUDE_SUBSTRINGS = ("バラエティ", "パチスロ", "スロット", "パチンコ", "イベント")
-# Build regexes that try to match tokens as standalone or separated by punctuation/space.
-# This reduces false positives from accidental substrings.
-_EX_CHAR_CLASS = r'[^0-9A-Za-zぁ-んァ-ヶ一-龠]'
-EXCLUDE_REGEXES = [re.compile(rf'(^|{_EX_CHAR_CLASS}){re.escape(tok)}($|{_EX_CHAR_CLASS})') for tok in EXCLUDE_SUBSTRINGS]
+# All tokens treated as substring (任意位置部分一致) for exclusion.
+EXCLUDE_CONTAINS = tuple(EXCLUDE_MEDIA_CONTAINS)
 
 
 
@@ -93,10 +127,11 @@ def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
             continue
         media_raw = w.get("media")
         nm = _normalize_media(media_raw) if isinstance(media_raw, str) else ""
-        # Skip excluded media by exact normalized set or by regex patterns to avoid false positives.
+        # Skip excluded media by exact normalized set.
         if nm in EXCLUDE_MEDIA_SET:
             continue
-        if any(rx.search(nm) for rx in EXCLUDE_REGEXES):
+        # Skip if any exclusion token appears anywhere in the normalized media string (substring match).
+        if any(tok in nm for tok in EXCLUDE_CONTAINS):
             continue
         media_key = nm or (media_raw or "Unknown")
         entry = {k: v for k, v in w.items() if k != "media"}
