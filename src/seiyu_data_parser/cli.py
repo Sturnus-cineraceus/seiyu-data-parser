@@ -8,72 +8,7 @@ from .io import open_bz2
 from .wikistream import iter_pages
 from . import extract
 
-def _normalize_media(s: str) -> str:
-    if not isinstance(s, str):
-        return ""
-    # remove HTML tags and simple templates
-    s = re.sub(r'<.*?>', '', s)
-    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
-    # Normalize common punctuation and full-width spaces; keep case as-is for Japanese.
-    s = s.replace('、', ',').replace('　', ' ').strip()
-    # Normalize various '特撮' variants to canonical '特撮'
-    if '特撮' in s or '特攝' in s:
-        return '特撮'
-    # If media contains CM (full-width or ASCII), normalize to 'CM' so it matches the exclude set
-    if 'CM' in s or 'ＣＭ' in s:
-        return 'CM'
-    # Normalize バラエティ variants and treat any containing バラエティ as 'バラエティ'
-    s = s.replace('バラエティー', 'バラエティ')
-    if 'バラエティ' in s:
-        return 'バラエティ'
-    # Normalize ナレーション／ナレーター variants: any media containing ナレーション or ナレーター -> 'ナレーション'
-    s = s.replace('ナレーター', 'ナレーション')
-    if 'ナレーション' in s:
-        return 'ナレーション'
-    # Normalize イベント variants and treat any containing イベント as 'イベント'
-    if 'イベント' in s:
-        return 'イベント'
-    # Normalize パチンコ／パチスロ variants and treat any containing those tokens as pachinko/pachislot
-    s = s.replace('パチスロー', 'パチスロ')
-    s = s.replace('パチンコー', 'パチンコ')
-    if 'パチスロ' in s or 'スロット' in s:
-        return 'パチスロ'
-    if 'パチンコ' in s:
-        return 'パチンコ'
-    # If the string contains ゲーム, treat it as a game
-    if 'ゲーム' in s:
-        return 'ゲーム'
-    return s
-
-
-EXCLUDE_MEDIA: List[str] = [
-    "バラエティ",
-    "イベント",
-    "ラジオ",
-    "舞台",
-    "その他コンテンツ",
-    "CD",
-    "その他",
-    "担当俳優",
-    "CM",
-    "レコード、CD",
-    "過去",
-    "現在",
-    "レギュラー",
-    "不定期",
-    "テレビ番組",
-    "特別番組",
-    "俳優",
-    "女優",
-    "担当女優",
-    "担当",
-    "映画（吹き替え）",
-    "吹き替え",
-    "テレビドラマ",
-    "ドラマ",
-]
-
-EXCLUDE_MEDIA_SET: frozenset = frozenset(_normalize_media(m) for m in EXCLUDE_MEDIA)
+from . import media
 
 
 def _strip_parenthetical(title: str) -> str:
@@ -141,25 +76,8 @@ def main():
                     if len(buffer) >= BATCH_SIZE:
                         # prepare grouped entries and write batch
                         for actor in buffer:
-                            # apply grouping/exclusion (same logic as before)
-                            exclude_set = EXCLUDE_MEDIA_SET
-                            works = actor.get("works")
-                            if works:
-                                grouped = {}
-                                # filter out excluded media and any media containing 'バラエティ', 'パチスロ', 'パチンコ' or 'イベント'
-                                filtered = []
-                                for w in works:
-                                    media_raw = w.get("media")
-                                    if isinstance(media_raw, str):
-                                        nm = _normalize_media(media_raw)
-                                        if nm in exclude_set or 'バラエティ' in nm or 'パチスロ' in nm or 'スロット' in nm or 'パチンコ' in nm or 'イベント' in nm:
-                                            continue
-                                    filtered.append(w)
-                                for w in filtered:
-                                    media = w.get("media", "Unknown")
-                                    entry = {k: v for k, v in w.items() if k != "media"}
-                                    grouped.setdefault(media, []).append(entry)
-                                actor["works"] = [{"media": m, "credits": c} for m, c in grouped.items()]
+                            # centralize media normalization/filtering/grouping
+                            actor = media.process_actor(actor)
                             # write actor JSON into stream, manage commas, pretty-print
                             actor_json = json.dumps(actor, ensure_ascii=False, indent=2)
                             indented = '\n'.join('  ' + l for l in actor_json.splitlines())
@@ -179,25 +97,8 @@ def main():
 
             # write any remaining buffered actors
             if buffer:
-                exclude_set = EXCLUDE_MEDIA_SET
                 for actor in buffer:
-                    works = actor.get("works")
-                    if works:
-                        grouped = {}
-                        # filter out excluded media and any media containing バラエティ, パチ系キーワード, or イベント
-                        filtered = []
-                        for w in works:
-                            media_raw = w.get("media")
-                            if isinstance(media_raw, str):
-                                nm = _normalize_media(media_raw)
-                                if nm in exclude_set or 'バラエティ' in nm or 'パチスロ' in nm or 'スロット' in nm or 'パチンコ' in nm or 'イベント' in nm:
-                                    continue
-                            filtered.append(w)
-                        for w in filtered:
-                            media = w.get("media", "Unknown")
-                            entry = {k: v for k, v in w.items() if k != "media"}
-                            grouped.setdefault(media, []).append(entry)
-                        actor["works"] = [{"media": m, "credits": c} for m, c in grouped.items()]
+                    actor = media.process_actor(actor)
                     # write actor JSON into stream, pretty-print
                     actor_json = json.dumps(actor, ensure_ascii=False, indent=2)
                     indented = '\n'.join('  ' + l for l in actor_json.splitlines())

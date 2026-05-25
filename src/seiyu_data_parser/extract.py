@@ -77,29 +77,7 @@ def _clean_text(s: str) -> str:
     return s.strip()
 
 
-def _normalize_media(media: str) -> str:
-    """Clean and normalize media heading strings.
-
-    - Strip HTML tags and simple templates
-    - Normalize punctuation and spaces
-    - Map various variants to canonical values (特撮, ゲーム, CM)
-    """
-    if not isinstance(media, str):
-        return ""
-    m = media
-    m = re.sub(r'<.*?>', '', m)
-    m = re.sub(r'\{\{.*?\}\}', '', m, flags=re.S)
-    m = m.replace('、', ',').replace('　', ' ').strip()
-    # Normalize various '特撮' variants to canonical '特撮'
-    if '特撮' in m or '特攝' in m:
-        return '特撮'
-    # CM precedence: if media mentions CM, normalize to 'CM'
-    if 'CM' in m or 'ＣＭ' in m:
-        return 'CM'
-    # Treat any media that contains 'ゲーム' as a game
-    if 'ゲーム' in m:
-        return 'ゲーム'
-    return m
+# media normalization moved to src.seiyu_data_parser.media
 
 _link_re = re.compile(r'\[\[([^|\]]+?)(?:\|([^]]+?))?\]\]')
 
@@ -285,8 +263,7 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
     year_re = re.compile(r'^\|\s*(\d{4})\s*年')
     results = []
     for media, block in blocks:
-        # normalize media heading (remove HTML, map games and CM)
-        media = _normalize_media(media)
+        # media normalization moved to media module; keep raw heading here
         current_year = None
         for line in block.splitlines():
             # detect year-def lines like: | 1979年 |
