@@ -36,6 +36,7 @@ EXCLUDE_MEDIA_EXACT = [
 
 # Tokens to match when they appear anywhere in the media string (substring match).
 EXCLUDE_MEDIA_CONTAINS = (
+    "テレビ",
     "バラエティ",
     "パチスロ",
     "スロット",
@@ -53,6 +54,9 @@ EXCLUDE_MEDIA_CONTAINS = (
     "アパレル",
     "アイドル",
     "アイスショー",
+    "ライブ",
+    "モデル",
+    "実写"
 )
 
 
@@ -65,6 +69,18 @@ def _normalize_media(s: str) -> str:
     m = m.replace('、', ',').replace('　', ' ').strip()
     # normalize fullwidth CD to ASCII for matching
     m = m.replace('ＣＤ', 'CD')
+
+    # Map TV anime variants to canonical 'アニメ' early so subsequent 'テレビ' exclusion
+    # does not remove TV anime entries. Handle common variants like 'TVアニメ',
+    # 'テレビアニメ', and 'テレビアニメーション'.
+    if re.search(r'(?:TV|ＴＶ|テレビ)\s*アニメ', m):
+        return 'アニメ'
+    m = m.replace('テレビアニメーション', 'アニメ')
+    m = m.replace('テレビアニメ', 'アニメ')
+    m = m.replace('ＴＶアニメ', 'アニメ')
+    m = m.replace('ＴＶアニメーション', 'アニメ')
+    m = m.replace('TVアニメ', 'アニメ')
+    m = m.replace('TVアニメーション', 'アニメ')
 
     # Map various audio-related variants to a single canonical media 'オーディオドラマ'.
     # Match common prefixes and tokens but avoid mapping lone 'CD' or generic 'ラジオ'.
