@@ -254,20 +254,31 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
     Parse the raw '出演' section text and return a list of works:
     [{"media": "...", "title": "...", "wiki_title": "...", "roles": ["r1","r2"], "year": 1979}, ...]
     The "year" field is an integer when present, otherwise an empty string "".
+
+    Behavior change: if a media-level heading's name is a year (e.g. "2014年"), treat it as a year marker
+    that applies to the most recent non-year media above it. Also detect year subheadings inside a media
+    block (deeper-level headings) and apply those years to their contained items.
     """
     if not section_text:
         return []
     blocks = _split_media_blocks(section_text, parent_level=parent_level)
     # matches list item lines that start with one or more asterisks (allow leading spaces)
     item_re = re.compile(r'^\s*\*+\s*(.+)$')
-    year_re = re.compile(r'^\|\s*(\d{4})\s*年')
+    # old style table year lines like: | 1979年 |
+    table_year_re = re.compile(r'^\|\s*(\d{4})\s*年')
+    # heading-level year detection (e.g. '2014年' or '2014')
+    heading_year_re = re.compile(r'^\s*(\d{4})\s*(?:年)?\s*$')
+
     results = []
-    for media, block in blocks:
-        # media normalization moved to media module; keep raw heading here
-        current_year = None
-        for line in block.splitlines():
-            # detect year-def lines like: | 1979年 |
-            m_year = year_re.match(line.strip())
+    last_non_year_media = None
+    # Determine media_level if parent_level provided
+    media_level = (parent_level + 1) if (parent_level is not None and parent_level > 0) else None
+
+    def _process_text_block(text_block: str, media_name: str, current_year: int | None):
+        """Parse list-item lines in text_block and append to results using media_name and current_year."""
+        for line in text_block.splitlines():
+            # detect table-style year rows
+            m_year = table_year_re.match(line.strip())
             if m_year:
                 try:
                     current_year = int(m_year.group(1))
@@ -278,26 +289,75 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             if not m_item:
                 continue
             raw = m_item.group(1)
-            # clean refs/templates/formatting
             cleaned = _clean_text(raw)
-            # unwrap wiki links and extract first link target
             unwrapped, link = _extract_unwrapped_and_link(cleaned)
             if not unwrapped:
                 continue
             title, roles = _parse_item_line(unwrapped)
-            # remove emphasis markup leftovers and stray punctuation
             title = title.strip(" \t\n\r'\"")
             title = re.sub(r"'{2,}", '', title).strip()
-            # ignore empty titles
             if not title:
                 continue
             wiki_title = link or title
             year_val = current_year if current_year is not None else ""
             results.append({
-                "media": media,
+                "media": media_name,
                 "title": title,
                 "wiki_title": wiki_title,
                 "roles": roles,
                 "year": year_val
             })
+
+    for media, block in blocks:
+        # If the media heading itself is a year, use it as a year marker for the previous non-year media
+        m_h_year = heading_year_re.match(media)
+        if m_h_year:
+            # this block likely contains items for the previous media, with this media heading being a year
+            try:
+                year_val = int(m_h_year.group(1))
+            except Exception:
+                year_val = None
+            target_media = last_non_year_media or media
+            _process_text_block(block, target_media, year_val)
+            # do not update last_non_year_media
+            continue
+
+        # media is a normal media heading
+        active_media = media
+        last_non_year_media = media
+
+        # If media_level is known, look for deeper-level subheadings inside this block (e.g. year subheadings)
+        if media_level is not None:
+            # subheadings are level >= media_level+1
+            sub_re = re.compile(r'(?m)^(?P<underline>={' + str(media_level + 1) + r',})\s*(?P<name>[^=]+?)\s*(?P=underline)\s*$')
+            matches = list(sub_re.finditer(block))
+            if not matches:
+                # no subheadings, process whole block under active_media
+                _process_text_block(block, active_media, None)
+                continue
+            # iterate segments split by subheadings
+            last_pos = 0
+            current_year = None
+            for m in matches:
+                pre = block[last_pos:m.start()]
+                if pre.strip():
+                    _process_text_block(pre, active_media, current_year)
+                sub_name = m.group('name').strip()
+                m_sub_year = heading_year_re.match(sub_name)
+                if m_sub_year:
+                    try:
+                        current_year = int(m_sub_year.group(1))
+                    except Exception:
+                        current_year = None
+                else:
+                    current_year = None
+                last_pos = m.end()
+            # tail
+            tail = block[last_pos:]
+            if tail.strip():
+                _process_text_block(tail, active_media, current_year)
+        else:
+            # media_level unknown: fall back to simple processing
+            _process_text_block(block, active_media, None)
+
     return results
