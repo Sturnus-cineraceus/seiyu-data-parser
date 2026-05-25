@@ -37,6 +37,7 @@ EXCLUDE_MEDIA_EXACT = [
 # Tokens to match when they appear anywhere in the media string (substring match).
 EXCLUDE_MEDIA_CONTAINS = (
     "テレビ",
+    "ラジオ",
     "バラエティ",
     "パチスロ",
     "スロット",
@@ -57,7 +58,7 @@ EXCLUDE_MEDIA_CONTAINS = (
     "ライブ",
     "モデル",
     "実写",
-    # Additional user-specified substring tokens to exclude (partial-match).
+    "番組"
     "吹替",
     "吹き替え",
     "歌",
@@ -79,6 +80,33 @@ EXCLUDE_MEDIA_CONTAINS = (
     "VP",
     "公式",
     "受賞",
+    "エッセイ",
+    "CD",
+    "曲",
+    "ダンス",
+    "ディレクター",
+    "企業",
+    "出版",
+    "映像",
+    "本人",
+    "玩具",
+    "落語",
+    "芝居",
+    "講師",
+    "語り",
+    "自主",
+    "公演",
+    "肖像",
+    "顔出し",
+    "特番",
+    "狂言",
+    "大使",
+    "製品",
+    "主催",
+    "コンサート",
+    "実況",
+    "学校",
+    "広報"
 )
 
 
@@ -110,7 +138,7 @@ def _normalize_media_initial(s: str) -> str:
         'オーディオドラマ', 'オーディオブック', 'オーディドラマ', 'オーディブック', 'オーディ',
         'ボイスドラマ', 'ボイスブック', 'ボイスCD', 'ボイスＣＤ',
         'カセットドラマ', 'カセットブック', 'カセット文庫', '朗読',
-        'ドラマCD', 'ドラマＣＤ', 'ラジオドラマ'
+        'ドラマCD', 'ドラマＣＤ', 'ラジオドラマ','音声ドラマ', 'ラジオCD', 'ラジオＣＤ','イヤードラマ','CDドラマ'
     ]
     if any(tok in m for tok in audio_tokens):
         return 'オーディオドラマ'
