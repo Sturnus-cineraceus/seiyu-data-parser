@@ -22,6 +22,24 @@ def _normalize_media(s: str) -> str:
     # If media contains CM (full-width or ASCII), normalize to 'CM' so it matches the exclude set
     if 'CM' in s or 'ＣＭ' in s:
         return 'CM'
+    # Normalize バラエティ variants and treat any containing バラエティ as 'バラエティ'
+    s = s.replace('バラエティー', 'バラエティ')
+    if 'バラエティ' in s:
+        return 'バラエティ'
+    # Normalize ナレーション／ナレーター variants: any media containing ナレーション or ナレーター -> 'ナレーション'
+    s = s.replace('ナレーター', 'ナレーション')
+    if 'ナレーション' in s:
+        return 'ナレーション'
+    # Normalize イベント variants and treat any containing イベント as 'イベント'
+    if 'イベント' in s:
+        return 'イベント'
+    # Normalize パチンコ／パチスロ variants and treat any containing those tokens as pachinko/pachislot
+    s = s.replace('パチスロー', 'パチスロ')
+    s = s.replace('パチンコー', 'パチンコ')
+    if 'パチスロ' in s or 'スロット' in s:
+        return 'パチスロ'
+    if 'パチンコ' in s:
+        return 'パチンコ'
     # If the string contains ゲーム, treat it as a game
     if 'ゲーム' in s:
         return 'ゲーム'
@@ -30,6 +48,7 @@ def _normalize_media(s: str) -> str:
 
 EXCLUDE_MEDIA: List[str] = [
     "バラエティ",
+    "イベント",
     "ラジオ",
     "舞台",
     "その他コンテンツ",
@@ -127,10 +146,15 @@ def main():
                             works = actor.get("works")
                             if works:
                                 grouped = {}
-                                filtered = [
-                                    w for w in works
-                                    if not (isinstance(w.get("media"), str) and _normalize_media(w.get("media")) in exclude_set)
-                                ]
+                                # filter out excluded media and any media containing 'バラエティ', 'パチスロ', 'パチンコ' or 'イベント'
+                                filtered = []
+                                for w in works:
+                                    media_raw = w.get("media")
+                                    if isinstance(media_raw, str):
+                                        nm = _normalize_media(media_raw)
+                                        if nm in exclude_set or 'バラエティ' in nm or 'パチスロ' in nm or 'スロット' in nm or 'パチンコ' in nm or 'イベント' in nm:
+                                            continue
+                                    filtered.append(w)
                                 for w in filtered:
                                     media = w.get("media", "Unknown")
                                     entry = {k: v for k, v in w.items() if k != "media"}
@@ -160,10 +184,15 @@ def main():
                     works = actor.get("works")
                     if works:
                         grouped = {}
-                        filtered = [
-                            w for w in works
-                            if not (isinstance(w.get("media"), str) and _normalize_media(w.get("media")) in exclude_set)
-                        ]
+                        # filter out excluded media and any media containing バラエティ, パチ系キーワード, or イベント
+                        filtered = []
+                        for w in works:
+                            media_raw = w.get("media")
+                            if isinstance(media_raw, str):
+                                nm = _normalize_media(media_raw)
+                                if nm in exclude_set or 'バラエティ' in nm or 'パチスロ' in nm or 'スロット' in nm or 'パチンコ' in nm or 'イベント' in nm:
+                                    continue
+                            filtered.append(w)
                         for w in filtered:
                             media = w.get("media", "Unknown")
                             entry = {k: v for k, v in w.items() if k != "media"}
