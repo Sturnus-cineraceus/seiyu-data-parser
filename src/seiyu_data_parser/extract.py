@@ -43,7 +43,7 @@ def extract_section(page_xml: str, section_name: str = "出演") -> Tuple[str, i
     try:
         root = ET.fromstring(page_xml)
     except ET.ParseError:
-        return ""
+        return "", 0
     text = ""
     for elem in root.iter():
         tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
@@ -127,7 +127,7 @@ def _extract_unwrapped_and_link(s: str):
     unwrapped = _link_re.sub(repl, s)
     return unwrapped, first_link or ""
 
-def _split_media_blocks(text: str, parent_level: int = None):
+def _split_media_blocks(text: str, parent_level: int | None = None):
     """
     Return list of (media_name, block_text). If no level-3+ headings found,
     return a single block with media "出演".
@@ -271,7 +271,7 @@ def _parse_item_line(line: str):
 
     return title, roles
 
-def parse_works_section(section_text: str, parent_level: int = None):
+def parse_works_section(section_text: str, parent_level: int | None = None):
     """
     Parse the raw '出演' section text and return a list of works:
     [{"media": "...", "title": "...", "wiki_title": "...", "roles": ["r1","r2"], "year": 1979}, ...]
