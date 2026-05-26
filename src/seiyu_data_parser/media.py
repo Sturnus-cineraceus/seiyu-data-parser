@@ -46,6 +46,7 @@ EXCEPTION_TOKENS = (
     'オーディオドラマ',
     '声優活動',
     '声優業',
+    '声優',
 )
 
 # Tokens to match when they appear anywhere in the media string (substring match).
@@ -536,17 +537,27 @@ def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
             # keep this media (do not exclude)
             pass
         else:
-            # If nm_initial is empty, do not exclude (cannot safely match)
+            # If nm_initial is empty, allow exception if raw_clean contains an exception token.
             if not nm_initial:
-                pass
+                if any(tok.lower() in raw_clean_lower for tok in EXCEPTION_TOKENS):
+                    # raw indicates voice-related content; do not exclude
+                    pass
+                else:
+                    # cannot safely match; do not exclude by default
+                    pass
             else:
-                # Exact normalized exclusion (first)
-                if nm_initial in EXCLUDE_MEDIA_SET:
-                    continue
-                # Substring exclusion against normalized value only (case-insensitive)
-                # also check short ASCII tokens with word-boundary regex to avoid false positives
-                if EXCLUDE_ASCII_RE.search(nm_initial_lower) or any(tok.lower() in nm_initial_lower for tok in EXCLUDE_CONTAINS):
-                    continue
+                # If normalization mapped to 'その他' but raw text contains an exception token,
+                # treat it as exception (do not exclude) so voice entries survive.
+                if nm_initial == 'その他' and any(tok.lower() in raw_clean_lower for tok in EXCEPTION_TOKENS):
+                    pass
+                else:
+                    # Exact normalized exclusion (first)
+                    if nm_initial in EXCLUDE_MEDIA_SET:
+                        continue
+                    # Substring exclusion against normalized value only (case-insensitive)
+                    # also check short ASCII tokens with word-boundary regex to avoid false positives
+                    if EXCLUDE_ASCII_RE.search(nm_initial_lower) or any(tok.lower() in nm_initial_lower for tok in EXCLUDE_CONTAINS):
+                        continue
         # Final normalization (e.g., map 'その他' to canonical 'その他')
         nm_final = _normalize_media_final(nm_initial) or (media_raw or "Unknown")
         media_key = nm_final

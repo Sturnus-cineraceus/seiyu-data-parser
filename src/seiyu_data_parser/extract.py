@@ -238,6 +238,21 @@ def _parse_item_line(line: str):
         roles = new_roles
         # タイトルからハイフン＋役部分を削除
         title = title[:m_role_suffix.start()].strip()
+    else:
+        # フォールバック: 行末のハイフン区切りで役名のみが付くケース（例: "作品 - ヤスオ"）
+        m_role_fallback = re.search(r'\s[-–—]\s*(.+?)\s*$', title)
+        if m_role_fallback:
+            role_text = m_role_fallback.group(1).strip()
+            # Avoid capturing cases where the suffix contains year-like or channel info (digits or 年)
+            if not re.search(r'\d|年', role_text):
+                new_roles = []
+                for sp in re.split(r'[、,，/／]+', role_text):
+                    sp = sp.strip().strip(' \t\n\r\'"')
+                    if sp:
+                        new_roles.append(sp)
+                if new_roles:
+                    roles = new_roles
+                    title = title[:m_role_fallback.start()].strip()
 
     # 役名候補の正規化: 先頭の「主演・」表記があれば除去（助演は対象外）
     normalized = []
