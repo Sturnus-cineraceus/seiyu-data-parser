@@ -14,7 +14,6 @@ EXCLUDE_MEDIA_EXACT = [
     "ラジオ",
     "その他コンテンツ",
     "CD",
-    "その他",
     "担当俳優",
     "CM",
     "レコード、CD",
@@ -263,6 +262,14 @@ EXCLUDE_MEDIA_CONTAINS = (
     "タイアップ",
     "ご当地キャラクター",
     "LINEスタンプ",
+    "NHK みんなのうた", "NHK くらしの歴史・歴史みつけた", "KaiRan-Van", "CМ", "CV", "CS", "CN", "C M",
+    "BS 俳句王国", "AmebaStudio", "ABEMA", "show", "bokura-dansha presents", "うたコン", "WALLOP",
+    "VTuber", "V-ライバー活動", "オペラ助演", "インフォマーシャル", "アートワーク", "カラオケ",
+    "テレホンサービス", "ソフトウェア", "スチール", "モーションコミック", "モーションキャプチャー",
+    "モーションキャプチャ", "モーションアクター", "ポスター", "ボクジェネ", "プロデュース",
+    "ビジネスマン必勝講座", "パソコンソフト", "ワンセグ", "再現VTR", "他劇団への客演", "煽りVTR",
+    "東京楽笑寄席", "方言指導", "怪談", "執筆活動", "執筆", "国外活動", "館内VTR", "遊技機", "通信系",
+    "講演",
 
     # preserve other original general tokens to avoid regressions
     "テレビ",
@@ -351,7 +358,19 @@ def _normalize_media_initial(s: str) -> str:
     m = m.replace('、', ',').replace('　', ' ').strip()
     # normalize fullwidth CD to ASCII for matching
     m = m.replace('ＣＤ', 'CD')
-
+ 
+    # Map certain tokens explicitly into the canonical 'その他' group per mapping rules.
+    # These are specific non-media tokens that should be grouped into 'その他' rather than excluded.
+    other_tokens = [
+        '声優活動', '声優業', '声優口演', '声優', '声の出演',
+        '音声データ', '音声コミック', '音声DVD', '音声CD',
+        'グッズ音声', 'キャラクターボイス', 'アフレコ', '着ボイス',
+        '玩具音声', 'プラネタリウムの声の出演'
+    ]
+    # Treat an exact single-token '他' as その他 as well
+    if m.strip() == '他' or any(tok in m for tok in other_tokens):
+        return 'その他'
+ 
     # Map TV anime variants to canonical 'アニメ' early so subsequent 'テレビ' exclusion
     # does not remove TV anime entries. Handle common variants like 'TVアニメ',
     # 'テレビアニメ', and their variants with common separators (・, /, -, etc.).
@@ -366,13 +385,18 @@ def _normalize_media_initial(s: str) -> str:
         'ボイスドラマ', 'ボイスブック', 'ボイスCD', 'ボイスＣＤ',
         'カセットドラマ', 'カセットブック', 'カセット文庫', '朗読',
         'ドラマCD', 'ドラマＣＤ', 'ラジオドラマ','音声ドラマ', 'ラジオCD', 'ラジオＣＤ','イヤードラマ','CDドラマ',
-
+ 
         # 追加（強い）
         'サウンドドラマ', '音声作品', '音声コンテンツ', 'ボイスシアター', '声劇',
-
+ 
+        # 追加（コミック系・類縁）
+        'ムービーコミック', 'コミックムービー', 'デジタルコミック・ボイスコミック', 'デジタルコミック',
+        'ボイスコミックス', 'ボイスコミック', 'ボイスコミック(発表年以降も複数話制作あり)',
+        'アテレコ', '+Voice', '＋Voice',
+ 
         # 追加（現代系）
         'ASMR', 'ASMR音声作品', 'ASMRコンテンツ', 'ポッドキャスト',
-
+ 
         # 条件付き（必要なら）
         '音声配信'
     ]
@@ -385,7 +409,7 @@ def _normalize_media_initial(s: str) -> str:
     anime_tokens = ['アニメ', 'animation', 'anime']
     movie_tokens = ['映画', '劇場', '劇場版', 'movie', 'film']
     tv_stream_tokens = ['tv', 'ＴＶ', 'テレビ', '配信', 'web', 'ネット', 'stream', '配信アニメ', 'ネット配信']
-    game_tokens = ['ゲーム', 'game', 'app', 'アプリ', 'pc', 'コンシューマ', 'コンシューマー', 'rpg', 'ノベル', 'visual novel', 'adv']
+    game_tokens = ['ゲーム', 'game', 'app', 'アプリ', 'pc', 'コンシューマ', 'コンシューマー', 'rpg', 'ノベル', 'visual novel', 'adv', 'ps4']
 
     has_anime = any((tok in m) or (tok in m_lower) for tok in anime_tokens)
     has_movie = any((tok in m) or (tok in m_lower) for tok in movie_tokens)
@@ -434,12 +458,12 @@ def _normalize_media_initial(s: str) -> str:
     # Narration detection: match listed tokens (substring match) but exclude when
     # certain audio/drama tokens are present (e.g., ドラマ, CD, ASMR).
     NARRATION_TOKENS = (
-        'ナレーション', 'ヴォイスオーバー', 'ボイスオーバー', 'ボイオーバー',
+        'ナレーション', 'アナウンス', 'ヴォイスオーバー', 'ボイスオーバー', 'ボイオーバー',
         '音声案内', '音声ガイド', '音声解説', '副音声（音声ガイド）', '音声提供',
         '館内アナウンス', '館内放送', '店内放送', '車内放送', '車内放送・ホーム案内', '車内アナウンス',
         '駅構内放送', '駅構内アナウンス', '駅自動放送', '自動放送・音声案内', '自動放送アナウンス',
         '機内放送', 'バス車内案内', '電話案内', '有線放送', '施設アナウンス等',
-        '公園・娯楽施設・館内アナウンス', '博物館子供用音声ガイド', 'ナレーター'
+        '公園・娯楽施設・館内アナウンス', '博物館子供用音声ガイド', 'ラジオ音声DVD', 'ナレーター'
     )
     # If any of these appear, treat as narration unless an exclusion token is present.
     NARRATION_EXCLUDE_TOKENS = ('ドラマ', 'CD', 'ボイスドラマ', 'サウンドドラマ', 'オーディオ', 'ASMR')
@@ -476,7 +500,7 @@ EXCLUDE_MEDIA_SET = frozenset(_normalize_media_initial(m) for m in EXCLUDE_MEDIA
 EXCLUDE_CONTAINS = tuple(EXCLUDE_MEDIA_CONTAINS)
 
 # short ASCII tokens handled with word-boundary regex to avoid substring false positives
-EXCLUDE_ASCII_RE = re.compile(r'\b(?:bd|dvd|vhs|iv|cm|pv|mv|youtube|web|tv|net)\b', re.I)
+EXCLUDE_ASCII_RE = re.compile(r'\b(?:bd|dvd|vhs|iv|cm|pv|mv|youtube|web|tv|net|cv|cs|cn|bs|abema|vtuber)\b', re.I)
 
 
 def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
