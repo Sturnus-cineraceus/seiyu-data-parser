@@ -5,6 +5,7 @@ and groups works into [{'media': ..., 'credits': [...]}, ...] to match existing 
 """
 from typing import Dict, Any, List
 import re
+import unicodedata
 
 # Exact normalized media strings to exclude (exact normalized match).
 EXCLUDE_MEDIA_EXACT = [
@@ -80,6 +81,9 @@ EXCLUDE_MEDIA_CONTAINS = (
     "DVDシネマ",
     "IV",
     "VHS",
+    "カセット",
+    "カセットテープ",
+    "ソノシート",
 
     # ② 配信・Web・ネット・動画系
     "配信",
@@ -147,6 +151,9 @@ EXCLUDE_MEDIA_CONTAINS = (
     "ムック本",
     "フォトブック",
     "ブック",
+    "著書",
+    "著作",
+    "月刊ジャイアンツ",
     "カタログ",
     "ストーリーブック",
 
@@ -191,6 +198,8 @@ EXCLUDE_MEDIA_CONTAINS = (
     "日本舞踊",
     "ファッションショー",
     "テーマパーク",
+    "プラネタリウム",
+    "東京ディズニーリゾート",
     "VRアトラクション",
     "アトラクション",
     "プロレス",
@@ -218,6 +227,7 @@ EXCLUDE_MEDIA_CONTAINS = (
     "コンピレーション",
     "コマーシャル",
     "CM",
+    "CF",
     "PV",
     "PV・案内",
     "Music Video",
@@ -237,6 +247,7 @@ EXCLUDE_MEDIA_CONTAINS = (
     "改名歴",
     "作品",
     "コンテンツ",
+    "プロジェクト",
     "その他",
     "そのコンテンツ",
     "そ の他コンテンツ",
@@ -256,6 +267,7 @@ EXCLUDE_MEDIA_CONTAINS = (
     # preserve other original general tokens to avoid regressions
     "テレビ",
     "ラジオ",
+    "放送",
     "バラエティ",
     "パチスロ",
     "スロット",
@@ -298,6 +310,9 @@ EXCLUDE_MEDIA_CONTAINS = (
     "受賞",
     "エッセイ",
     "CD",
+    "音声CD",
+    "音声DVD",
+    "ラジオ音声DVD",
     "曲",
     "ダンス",
     "ディレクター",
@@ -325,11 +340,12 @@ EXCLUDE_MEDIA_CONTAINS = (
     "広報"
 )
 
-
 def _normalize_media_initial(s: str) -> str:
     if not isinstance(s, str):
         return ""
     m = s
+    # normalize full/halfwidth differences etc.
+    m = unicodedata.normalize('NFKC', m)
     m = re.sub(r'<.*?>', '', m)
     m = re.sub(r'\{\{.*?\}\}', '', m, flags=re.S)
     m = m.replace('、', ',').replace('　', ' ').strip()
@@ -338,15 +354,9 @@ def _normalize_media_initial(s: str) -> str:
 
     # Map TV anime variants to canonical 'アニメ' early so subsequent 'テレビ' exclusion
     # does not remove TV anime entries. Handle common variants like 'TVアニメ',
-    # 'テレビアニメ', and 'テレビアニメーション'.
-    if re.search(r'(?:TV|ＴＶ|テレビ)\s*アニメ', m):
+    # 'テレビアニメ', and their variants with common separators (・, /, -, etc.).
+    if re.search(r'(?:TV|ＴＶ|テレビ)[\s・\-/／―]*アニメ(?:ーション)?', m):
         return 'アニメ'
-    m = m.replace('テレビアニメーション', 'アニメ')
-    m = m.replace('テレビアニメ', 'アニメ')
-    m = m.replace('ＴＶアニメ', 'アニメ')
-    m = m.replace('ＴＶアニメーション', 'アニメ')
-    m = m.replace('TVアニメ', 'アニメ')
-    m = m.replace('TVアニメーション', 'アニメ')
 
     # Map various audio-related variants to a single canonical media 'オーディオドラマ'.
     # Match common prefixes and tokens but avoid mapping lone 'CD' or generic 'ラジオ'.
@@ -449,7 +459,6 @@ def _normalize_media_initial(s: str) -> str:
         return 'ゲーム'
     return m
 
-
 def _normalize_media_final(s: str) -> str:
     if not isinstance(s, str):
         return ""
@@ -459,7 +468,6 @@ def _normalize_media_final(s: str) -> str:
         return 'その他'
     return m
 
-
 # Derived exclusion helpers built from the canonical constant groups above.
 # Exact normalized set for quick equality checks (use initial normalization here).
 EXCLUDE_MEDIA_SET = frozenset(_normalize_media_initial(m) for m in EXCLUDE_MEDIA_EXACT)
@@ -467,6 +475,8 @@ EXCLUDE_MEDIA_SET = frozenset(_normalize_media_initial(m) for m in EXCLUDE_MEDIA
 # All tokens treated as substring (任意位置部分一致) for exclusion.
 EXCLUDE_CONTAINS = tuple(EXCLUDE_MEDIA_CONTAINS)
 
+# short ASCII tokens handled with word-boundary regex to avoid substring false positives
+EXCLUDE_ASCII_RE = re.compile(r'\b(?:bd|dvd|vhs|iv|cm|pv|mv|youtube|web|tv|net)\b', re.I)
 
 
 def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
@@ -497,17 +507,22 @@ def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
         nm_initial_lower = nm_initial.lower()
         raw_clean_lower = raw_clean.lower()
 
-        # Exception tokens have highest priority: check both raw-cleaned and normalized values.
-        if any(tok.lower() in nm_initial_lower or tok.lower() in raw_clean_lower for tok in EXCEPTION_TOKENS):
+        # Exception tokens have highest priority: check normalized value only.
+        if nm_initial and any(tok.lower() in nm_initial_lower for tok in EXCEPTION_TOKENS):
             # keep this media (do not exclude)
             pass
         else:
-            # Exact normalized exclusion (first)
-            if nm_initial in EXCLUDE_MEDIA_SET:
-                continue
-            # Substring exclusion against both normalized and raw-cleaned values (case-insensitive)
-            if any(tok.lower() in nm_initial_lower or tok.lower() in raw_clean_lower for tok in EXCLUDE_CONTAINS):
-                continue
+            # If nm_initial is empty, do not exclude (cannot safely match)
+            if not nm_initial:
+                pass
+            else:
+                # Exact normalized exclusion (first)
+                if nm_initial in EXCLUDE_MEDIA_SET:
+                    continue
+                # Substring exclusion against normalized value only (case-insensitive)
+                # also check short ASCII tokens with word-boundary regex to avoid false positives
+                if EXCLUDE_ASCII_RE.search(nm_initial_lower) or any(tok.lower() in nm_initial_lower for tok in EXCLUDE_CONTAINS):
+                    continue
         # Final normalization (e.g., map 'その他' to canonical 'その他')
         nm_final = _normalize_media_final(nm_initial) or (media_raw or "Unknown")
         media_key = nm_final
