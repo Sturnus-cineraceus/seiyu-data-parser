@@ -50,21 +50,132 @@ EXCEPTION_TOKENS = (
 
 # Tokens to match when they appear anywhere in the media string (substring match).
 EXCLUDE_MEDIA_CONTAINS = (
-    # 映画・ドラマ系（実写除外の主軸）
+    # ① 映像・実写・ビデオ系（partial-match）
     "映画",
     "ドラマ",
     "Vシネマ",
     "ビデオドラマ",
     "ビデオ映画",
+    "邦画",
+    "時代劇",
+    "外画",
+    "ビデオ",
+    "ビデオシネマ",
+    "ビデオムービー",
+    "ビデオマガジン",
+    "ビデオパッケージ",
+    "ビデオグラム",
+    "ビデオ / DVD作品",
+    "オリジナル・ビデオ",
+    "オリジナルビデオ",
+    "オリジナルビデオ・DVD",
+    "オリジナルDVD",
+    "DVD",
+    "DVD・BD",
+    "DVD・Blu-ray",
+    "BD/DVD",
+    "BD・DVD",
+    "Blu-ray",
+    "DVD-ROM",
+    "DVDシネマ",
+    "IV",
+    "VHS",
 
+    # ② 配信・Web・ネット・動画系
+    "配信",
+    "動画",
+    "動画配信",
+    "ネット",
+    "ネット配信",
+    "インターネット",
+    "インターネット配信",
+    "インターネット動画",
+    "インターネット動画配信",
+    "インターネット放送",
+    "インターネット生配信",
+    "インターネットTV",
+    "ウェブ",
+    "web",
+    "WEB",
+    "Web",
+    "YouTube",
+    "Youtube",
+    "YOUTUBE",
+    "ニコニコ動画",
+    "ニコニコ生放送",
+    "生配信",
+    "生放送",
+    "オンライン動画",
+    "ウェブ配信",
+    "Web配信",
+    "WEB配信",
+    "Web動画",
+    "WEB動画",
+    "Webムービー",
+    "WEBムービー",
+    "Webシネマ",
+    "WEBシネマ",
+    "WebTV",
+    "WEBTV",
+    "Webコンテンツ",
+    "WEBコンテンツ",
+    "Webサイト",
+    "Webマガジン",
+    "WEBマガジン",
+
+    # ③ ドキュメント・教育・資料系
+    "ドキュメント",
+    "ドキュメンタリー",
+    "情報・ドキュメンタリー",
+    "ドキュメンタリー・他",
+    "教育用ビデオ",
+    "教育ビデオ",
+    "教育ソフト",
+    "教材",
+    "教材関連",
+    "知育教材",
+    "研修ビデオ",
+    "インタビュー",
+    "インタビュー記事",
+    "インタビュー対談",
+    "出典",
+    "出展",
+    "伝記",
+    "本",
+    "書籍",
+    "単行本",
+    "ムック本",
+    "フォトブック",
+    "ブック",
+    "カタログ",
+    "ストーリーブック",
+
+    # ④ 実写出演・人物系（俳優混入防止）
     "出演",
     "俳優業",
     "女優業",
     "TV出演",
     "外部出演",
-    # 出演・俳優系 (others covered elsewhere or by exact matches)
+    "アナウンサー",
+    "アナウンサー時代",
+    "フリーアナウンサー",
+    "キャスター",
+    "レポーター",
+    "リポーター",
+    "MC",
+    "パーソナリティ",
+    "パーソナリティ・MC",
+    "スタジアムDJ",
+    "DJ",
+    "VJ",
+    "サポーター",
+    "サポートミュージシャン",
+    "アーティスト活動",
+    "SMAP時代",
+    "NHK時代",
+    "新しい地図時代",
 
-    # 舞台・イベント系
+    # ⑤ 舞台・イベント・リアル系
     "演劇",
     "ステージ",
     "ショー",
@@ -72,8 +183,24 @@ EXCLUDE_MEDIA_CONTAINS = (
     "トークショウ",
     "ランウェイ",
     "撮影会",
+    "ストレートプレイ",
+    "コント",
+    "即興劇",
+    "独演会",
+    "演奏会",
+    "日本舞踊",
+    "ファッションショー",
+    "テーマパーク",
+    "VRアトラクション",
+    "アトラクション",
+    "プロレス",
+    "リングアナウンサー",
+    "リングアナ",
+    "リング・アナウンサー",
+    "グルメリポート",
+    "イベント",
 
-    # 音楽系
+    # ⑥ 音楽・制作・作品系ノイズ
     "ボーカル",
     "アルバム",
     "バンド",
@@ -82,31 +209,57 @@ EXCLUDE_MEDIA_CONTAINS = (
     "LIVE",
     "ライブ",
 
-    # 活動・制作系
-    "プロデュース",
-    "プロジェクト",
-    "メディアミックス",
-    "アーティスト活動",
-    "執筆",
-    "著書",
-    "書籍",
+    "レコーディング",
+    "レコーディング参加",
+    "作詞作品",
+    "作詞提供",
+    "ディスコグラフィ",
+    "ディスコグラフィー",
+    "コンピレーション",
+    "コマーシャル",
+    "CM",
+    "PV",
+    "PV・案内",
+    "Music Video",
+    "MV",
+    "MUSIC VIDEO",
+    "タイアップ",
+    "イメージ作品",
+    "イメージビデオ",
+    "イメージガール",
+    "イメージキャラクター",
+    "キャラクター",
+    "キャラクターコンテンツ",
+    "キャラクター・イメージソング",
+    "キャラソン",
 
-    # その他
+    # ⑦ その他ノイズ
+    "改名歴",
+    "作品",
+    "コンテンツ",
+    "その他",
+    "そのコンテンツ",
+    "そ の他コンテンツ",
+    "メディア",
+    "メディア企画",
+    "メディアミックス",
     "写真集",
     "写真展",
     "イラスト",
     "キャンペーン",
     "コラボ",
     "アンバサダー",
+    "タイアップ",
+    "ご当地キャラクター",
+    "LINEスタンプ",
 
-    # existing/general tokens (preserve original set)
+    # preserve other original general tokens to avoid regressions
     "テレビ",
     "ラジオ",
     "バラエティ",
     "パチスロ",
     "スロット",
     "パチンコ",
-    "イベント",
     "舞台",
     "ミュージカル",
     "ミュージック",
@@ -334,16 +487,26 @@ def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
             continue
         media_raw = w.get("media")
         nm_initial = _normalize_media_initial(media_raw) if isinstance(media_raw, str) else ""
-        # Exception tokens have highest priority: if matched, do NOT exclude.
-        if any(tok in nm_initial for tok in EXCEPTION_TOKENS):
-            # keep this media (do not continue)
+        # Prepare a minimal cleaned version of the original media string (before aggressive mappings)
+        raw_clean = ""
+        if isinstance(media_raw, str):
+            raw_clean = re.sub(r'<.*?>', '', media_raw)
+            raw_clean = re.sub(r'\{\{.*?\}\}', '', raw_clean, flags=re.S)
+            raw_clean = raw_clean.replace('、', ',').replace('　', ' ').strip()
+            raw_clean = raw_clean.replace('ＣＤ', 'CD')
+        nm_initial_lower = nm_initial.lower()
+        raw_clean_lower = raw_clean.lower()
+
+        # Exception tokens have highest priority: check both raw-cleaned and normalized values.
+        if any(tok.lower() in nm_initial_lower or tok.lower() in raw_clean_lower for tok in EXCEPTION_TOKENS):
+            # keep this media (do not exclude)
             pass
         else:
             # Exact normalized exclusion (first)
             if nm_initial in EXCLUDE_MEDIA_SET:
                 continue
-            # Substring exclusion against the initial normalized value (second)
-            if any(tok in nm_initial for tok in EXCLUDE_CONTAINS):
+            # Substring exclusion against both normalized and raw-cleaned values (case-insensitive)
+            if any(tok.lower() in nm_initial_lower or tok.lower() in raw_clean_lower for tok in EXCLUDE_CONTAINS):
                 continue
         # Final normalization (e.g., map 'その他' to canonical 'その他')
         nm_final = _normalize_media_final(nm_initial) or (media_raw or "Unknown")
