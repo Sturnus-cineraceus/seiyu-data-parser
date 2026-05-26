@@ -34,8 +34,72 @@ EXCLUDE_MEDIA_EXACT = [
     # Note: tokens that should be matched by substring or bounded rules are defined below
 ]
 
+# Exception tokens: if any of these appear in the normalized media string, the media should NOT be excluded.
+# These are higher priority than exclusion tokens (例外トークン ＞ 除外トークン).
+EXCEPTION_TOKENS = (
+    '声の出演',
+    'ナレーション',
+    'ボイス',
+    '音声',
+    'ドラマCD',
+    'ドラマＣＤ',
+    'オーディオドラマ',
+    '声優活動',
+    '声優業',
+)
+
 # Tokens to match when they appear anywhere in the media string (substring match).
 EXCLUDE_MEDIA_CONTAINS = (
+    # 映画・ドラマ系（実写除外の主軸）
+    "映画",
+    "ドラマ",
+    "Vシネマ",
+    "ビデオドラマ",
+    "ビデオ映画",
+
+    "出演",
+    "俳優業",
+    "女優業",
+    "TV出演",
+    "外部出演",
+    # 出演・俳優系 (others covered elsewhere or by exact matches)
+
+    # 舞台・イベント系
+    "演劇",
+    "ステージ",
+    "ショー",
+    "トークショー",
+    "トークショウ",
+    "ランウェイ",
+    "撮影会",
+
+    # 音楽系
+    "ボーカル",
+    "アルバム",
+    "バンド",
+    "コーラス",
+    "キャラクターソング",
+    "LIVE",
+    "ライブ",
+
+    # 活動・制作系
+    "プロデュース",
+    "プロジェクト",
+    "メディアミックス",
+    "アーティスト活動",
+    "執筆",
+    "著書",
+    "書籍",
+
+    # その他
+    "写真集",
+    "写真展",
+    "イラスト",
+    "キャンペーン",
+    "コラボ",
+    "アンバサダー",
+
+    # existing/general tokens (preserve original set)
     "テレビ",
     "ラジオ",
     "バラエティ",
@@ -55,10 +119,9 @@ EXCLUDE_MEDIA_CONTAINS = (
     "アパレル",
     "アイドル",
     "アイスショー",
-    "ライブ",
     "モデル",
     "実写",
-    "番組"
+    "番組",
     "吹替",
     "吹き替え",
     "歌",
@@ -135,13 +198,67 @@ def _normalize_media_initial(s: str) -> str:
     # Map various audio-related variants to a single canonical media 'オーディオドラマ'.
     # Match common prefixes and tokens but avoid mapping lone 'CD' or generic 'ラジオ'.
     audio_tokens = [
+        # 既存
         'オーディオドラマ', 'オーディオブック', 'オーディドラマ', 'オーディブック', 'オーディ',
         'ボイスドラマ', 'ボイスブック', 'ボイスCD', 'ボイスＣＤ',
         'カセットドラマ', 'カセットブック', 'カセット文庫', '朗読',
-        'ドラマCD', 'ドラマＣＤ', 'ラジオドラマ','音声ドラマ', 'ラジオCD', 'ラジオＣＤ','イヤードラマ','CDドラマ'
+        'ドラマCD', 'ドラマＣＤ', 'ラジオドラマ','音声ドラマ', 'ラジオCD', 'ラジオＣＤ','イヤードラマ','CDドラマ',
+
+        # 追加（強い）
+        'サウンドドラマ', '音声作品', '音声コンテンツ', 'ボイスシアター', '声劇',
+
+        # 追加（現代系）
+        'ASMR', 'ASMR音声作品', 'ASMRコンテンツ', 'ポッドキャスト',
+
+        # 条件付き（必要なら）
+        '音声配信'
     ]
     if any(tok in m for tok in audio_tokens):
         return 'オーディオドラマ'
+
+    # New mapping: prioritize anime vs theatrical anime, then games.
+    # Check both Japanese tokens and lowercase English tokens.
+    m_lower = m.lower()
+    anime_tokens = ['アニメ', 'animation', 'anime']
+    movie_tokens = ['映画', '劇場', '劇場版', 'movie', 'film']
+    tv_stream_tokens = ['tv', 'ＴＶ', 'テレビ', '配信', 'web', 'ネット', 'stream', '配信アニメ', 'ネット配信']
+    game_tokens = ['ゲーム', 'game', 'app', 'アプリ', 'pc', 'コンシューマ', 'コンシューマー', 'rpg', 'ノベル', 'visual novel', 'adv']
+
+    has_anime = any((tok in m) or (tok in m_lower) for tok in anime_tokens)
+    has_movie = any((tok in m) or (tok in m_lower) for tok in movie_tokens)
+    has_game = any((tok in m) or (tok in m_lower) for tok in game_tokens)
+
+    # 劇場アニメ優先：アニメ要素かつ映画/劇場要素がある場合
+    if has_anime and has_movie:
+        return '劇場アニメ'
+    # TV / 配信 のアニメを優先（例: 配信アニメ）
+    has_tv_stream = any((tok in m) or (tok in m_lower) for tok in tv_stream_tokens)
+    if has_anime and has_tv_stream:
+        return 'アニメ'
+
+    # OVA 判定（優先度は 劇場アニメ > TV/配信アニメ > OVA ）
+    # 無条件トークン（OVA系）
+    # Match OVA-like ASCII tokens but avoid matching substrings inside English words (e.g., 'novel').
+    # Use negative lookbehind/lookahead for ASCII alphanumerics.
+    if re.search(r'(?i)(?<![A-Za-z0-9])(?:ova|oav|oad|ov)(?![A-Za-z0-9])', m):
+        # ただし映画・劇場・TV・配信・ドラマ等が含まれる場合は OVA にしない
+        if not has_movie and not has_tv_stream and 'ドラマ' not in m:
+            return 'OVA'
+
+    # 「オリジナルアニメ」を含み、かつ TV/映画/劇場 を含まない場合は OVA
+    if 'オリジナルアニメ' in m and not (has_movie or has_tv_stream):
+        return 'OVA'
+
+    # 「短編アニメ」または「パイロットアニメ」を含み、かつTV/映画/配信/Web/ネットを含まない場合はOVA
+    if (('短編アニメ' in m) or ('パイロットアニメ' in m)) and not (has_movie or has_tv_stream or '配信' in m or 'web' in m.lower() or 'ネット' in m):
+        return 'OVA'
+
+    # テレビ等のアニメ（映画要素を含まない）
+    if has_anime and not has_movie:
+        return 'アニメ'
+    # ゲーム要素があればゲームにまとめる
+    if has_game:
+        return 'ゲーム'
 
     if '特撮' in m or '特攝' in m:
         return '特撮'
@@ -150,9 +267,23 @@ def _normalize_media_initial(s: str) -> str:
     m = m.replace('バラエティー', 'バラエティ')
     if 'バラエティ' in m:
         return 'バラエティ'
-    m = m.replace('ナレーター', 'ナレーション')
-    if 'ナレーション' in m:
-        return 'ナレーション'
+
+    # Narration detection: match listed tokens (substring match) but exclude when
+    # certain audio/drama tokens are present (e.g., ドラマ, CD, ASMR).
+    NARRATION_TOKENS = (
+        'ナレーション', 'ヴォイスオーバー', 'ボイスオーバー', 'ボイオーバー',
+        '音声案内', '音声ガイド', '音声解説', '副音声（音声ガイド）', '音声提供',
+        '館内アナウンス', '館内放送', '店内放送', '車内放送', '車内放送・ホーム案内', '車内アナウンス',
+        '駅構内放送', '駅構内アナウンス', '駅自動放送', '自動放送・音声案内', '自動放送アナウンス',
+        '機内放送', 'バス車内案内', '電話案内', '有線放送', '施設アナウンス等',
+        '公園・娯楽施設・館内アナウンス', '博物館子供用音声ガイド', 'ナレーター'
+    )
+    # If any of these appear, treat as narration unless an exclusion token is present.
+    NARRATION_EXCLUDE_TOKENS = ('ドラマ', 'CD', 'ボイスドラマ', 'サウンドドラマ', 'オーディオ', 'ASMR')
+    if any(tok in m for tok in NARRATION_TOKENS):
+        if not any(ex in m for ex in NARRATION_EXCLUDE_TOKENS):
+            return 'ナレーション'
+
     if 'イベント' in m:
         return 'イベント'
     m = m.replace('パチスロー', 'パチスロ')
@@ -203,12 +334,17 @@ def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
             continue
         media_raw = w.get("media")
         nm_initial = _normalize_media_initial(media_raw) if isinstance(media_raw, str) else ""
-        # Exact normalized exclusion (first)
-        if nm_initial in EXCLUDE_MEDIA_SET:
-            continue
-        # Substring exclusion against the initial normalized value (second)
-        if any(tok in nm_initial for tok in EXCLUDE_CONTAINS):
-            continue
+        # Exception tokens have highest priority: if matched, do NOT exclude.
+        if any(tok in nm_initial for tok in EXCEPTION_TOKENS):
+            # keep this media (do not continue)
+            pass
+        else:
+            # Exact normalized exclusion (first)
+            if nm_initial in EXCLUDE_MEDIA_SET:
+                continue
+            # Substring exclusion against the initial normalized value (second)
+            if any(tok in nm_initial for tok in EXCLUDE_CONTAINS):
+                continue
         # Final normalization (e.g., map 'その他' to canonical 'その他')
         nm_final = _normalize_media_final(nm_initial) or (media_raw or "Unknown")
         media_key = nm_final
