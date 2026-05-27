@@ -65,7 +65,13 @@ def main():
                         with open("data/debug_detail.txt", "a", encoding="utf-8") as ddf:
                             ddf.write(section + "\n\n")
                     works = extract.parse_works_section(section, parent_level=level)
-                    result_item: Dict[str, Any] = {"name": _strip_parenthetical(title), "wiki_title": title}
+                    # Provide both legacy `wiki_title` and new `canonical_name`
+                    # keys so downstream code can migrate gradually.
+                    result_item: Dict[str, Any] = {
+                        "name": _strip_parenthetical(title),
+                        "wiki_title": title,
+                        "canonical_name": title,
+                    }
                     if works:
                         result_item["works"] = works
 

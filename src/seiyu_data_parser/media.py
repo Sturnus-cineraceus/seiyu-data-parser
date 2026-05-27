@@ -507,7 +507,7 @@ EXCLUDE_ASCII_RE = re.compile(r'\b(?:bd|dvd|vhs|iv|cm|pv|mv|youtube|web|tv|net|c
 def process_actor(actor: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize, filter and group works for a single actor record.
 
-    Input actor: {"name": ..., "wiki_title": ..., "works": [ {"media": raw, "title":..., ...}, ... ]}
+    Input actor: {"name": ..., "wiki_title": ..., "canonical_name": ..., "works": [ {"media": raw, "title":..., ...}, ... ]}
     Output actor has works grouped as [{"media": normalized_media, "credits": [...]}, ...].
     """
     if not isinstance(actor, dict):

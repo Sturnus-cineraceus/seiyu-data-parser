@@ -25,11 +25,17 @@ def _normalize_text(value: Any) -> str:
     return value.strip()
 
 
-def _hash_wiki_title(wiki_title: str) -> Optional[str]:
-    wiki_title = _normalize_text(wiki_title)
-    if not wiki_title:
+def _hash_canonical_name(canonical_name: str) -> Optional[str]:
+    """Generate a short, URL-safe hash for a canonical name.
+
+    This replaces the previous wiki_title hashing. Accepts the canonical
+    (normalized) name and returns a base64 urlsafe string without padding,
+    or None if the input is empty.
+    """
+    canonical_name = _normalize_text(canonical_name)
+    if not canonical_name:
         return None
-    digest = hashlib.blake2b(wiki_title.encode("utf-8"), digest_size=12).digest()
+    digest = hashlib.blake2b(canonical_name.encode("utf-8"), digest_size=12).digest()
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
@@ -63,13 +69,19 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS voice_actors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            wiki_title TEXT,
-            wiki_title_hash TEXT
+            name TEXT NOT NULL,
+            canonical_name TEXT,
+            canonical_name_hash TEXT
         );
 
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_actors_wiki_title_hash
-            ON voice_actors(wiki_title_hash);
+        -- Unique indexes on canonical_name and its short hash. NULL values are
+        -- allowed during backfill; SQLite permits multiple NULLs for unique
+        -- indexes which makes migrations safer.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_actors_canonical_name
+            ON voice_actors(canonical_name);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_actors_canonical_name_hash
+            ON voice_actors(canonical_name_hash);
 
         CREATE TABLE IF NOT EXISTS works (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,23 +132,37 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     name = _normalize_text(actor.get("name"))
     if not name:
         raise ValueError("voice actor name is required")
-    wiki_title = _normalize_text(actor.get("wiki_title")) or None
-    wiki_title_hash = _hash_wiki_title(wiki_title) if wiki_title else None
-    conn.execute(
-        "INSERT OR IGNORE INTO voice_actors(name, wiki_title, wiki_title_hash) VALUES (?, ?, ?)",
-        (name, wiki_title, wiki_title_hash),
-    )
-    if wiki_title:
+
+    # Backwards-compatible: accept either `canonical_name` (new) or
+    # `wiki_title` (legacy) from incoming actor payloads.
+    canonical_name = _normalize_text(actor.get("canonical_name") or actor.get("wiki_title")) or None
+    canonical_name_hash = _hash_canonical_name(canonical_name) if canonical_name else None
+
+    if canonical_name:
+        # Prefer inserting/looking up by canonical_name (it's unique when present).
+        conn.execute(
+            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name) VALUES (?, ?, ?)",
+            (canonical_name, canonical_name_hash, name),
+        )
+        # Ensure the record has a name if it was previously empty.
         conn.execute(
             """
             UPDATE voice_actors
-               SET wiki_title = COALESCE(NULLIF(wiki_title, ''), ?),
-                   wiki_title_hash = COALESCE(NULLIF(wiki_title_hash, ''), ?)
-             WHERE name = ?
+               SET name = COALESCE(NULLIF(name, ''), ?)
+             WHERE canonical_name = ?
             """,
-            (wiki_title, wiki_title_hash, name),
+            (name, canonical_name),
         )
-    return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ?", (name,))
+        return _get_id(conn, "SELECT id FROM voice_actors WHERE canonical_name = ?", (canonical_name,))
+    else:
+        # Legacy path: no canonical_name provided. Insert by name (non-unique
+        # names are allowed) and return the first matching id.
+        conn.execute(
+            "INSERT OR IGNORE INTO voice_actors(name) VALUES (?)",
+            (name,),
+        )
+        # Return one id that matches the name (order by id to be deterministic).
+        return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ? ORDER BY id LIMIT 1", (name,))
 
 
 def _upsert_work(conn: sqlite3.Connection, media: str, title: str, wiki_title: str) -> int:

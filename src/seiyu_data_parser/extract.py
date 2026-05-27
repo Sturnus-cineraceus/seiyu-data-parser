@@ -305,7 +305,19 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
                 continue
             raw = m_item.group(1)
             cleaned = _clean_text(raw)
-            unwrapped, link = _extract_unwrapped_and_link(cleaned)
+
+            # enumerate all wiki links in the item as (target, label)
+            item_link_pairs = [
+                (m.group(1).strip(), (m.group(2) or m.group(1)).strip())
+                for m in _link_re.finditer(cleaned)
+            ]
+            first_link_target = item_link_pairs[0][0] if item_link_pairs else ""
+
+            # extract any link/label present in the media heading
+            media_unwrapped, media_link = _extract_unwrapped_and_link(media_name)
+
+            # unwrapped display text for the item (used to parse title/roles)
+            unwrapped, _ = _extract_unwrapped_and_link(cleaned)
             if not unwrapped:
                 continue
             title, roles = _parse_item_line(unwrapped)
@@ -313,12 +325,36 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             title = re.sub(r"'{2,}", '', title).strip()
             if not title:
                 continue
-            wiki_title = link or title
+
+            # Determine wiki_title with priority:
+            # 1) If the media heading has a link and the item contains a link
+            #    that matches the media link (by target or by label==media label), use it.
+            # 2) If the media heading has a link, use that (block default).
+            # 3) Use the item's first link target.
+            # 4) Fallback to the parsed title.
+            chosen = ""
+            if media_link and item_link_pairs:
+                for target, label in item_link_pairs:
+                    if target == media_link or (media_unwrapped and label == media_unwrapped):
+                        chosen = target
+                        break
+            if not chosen and media_link:
+                chosen = media_link
+            if not chosen and first_link_target:
+                chosen = first_link_target
+            if not chosen:
+                chosen = title
+
+            wiki_title = chosen
             year_val = current_year if current_year is not None else ""
             results.append({
                 "media": media_name,
                 "title": title,
+                # Keep legacy `wiki_title` for compatibility and also set the
+                # new `canonical_name` key which represents the normalized
+                # unique person/entry name used elsewhere.
                 "wiki_title": wiki_title,
+                "canonical_name": wiki_title,
                 "roles": roles,
                 "year": year_val
             })

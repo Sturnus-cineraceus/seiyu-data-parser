@@ -35,7 +35,7 @@ python seiyu_data_parser_sqlite.py voice_actor.json -o voice_actor.sqlite3
 - `voice_actors`
 - `works`
 - `voice_actor_work_mappings`
-`voice_actors` には URL 用の `wiki_title_hash` も含まれ、`wiki_title_hash` にユニークインデックスが張られます。
+`voice_actors` には URL 用の `canonical_name_hash` も含まれ、`canonical_name_hash` にユニークインデックスが張られます。
 `works` は `wiki_title` を一意キーとして扱い、`title` には表示用の作品名を保持します。
 
 テーブル定義
@@ -47,9 +47,9 @@ voice_actors
 | Column | Type | Nullable | Description | Example |
 |---|---:|:---:|---|---|
 | id | integer | No | 自動採番される主キー | 1 |
-| name | text | No | 声優の表示名（ユニーク） | "花澤香菜" |
-| wiki_title | text | Yes | Wikipedia のページタイトル（存在すれば） | "Hanazawa_Kana" |
-| wiki_title_hash | text | Yes | wiki_title の短縮ハッシュ（URL 用、ユニークインデックス） | "XyZ123..." |
+| name | text | No | 声優の表示名（ユニークではない） | "花澤香菜" |
+| canonical_name | text | Yes | 正規化されたフルネーム（例: Wikipedia タイトル）。存在することが前提。 | "Hanazawa_Kana" |
+| canonical_name_hash | text | Yes | canonical_name の短縮ハッシュ（URL 用、ユニークインデックス） | "XyZ123..." |
 
 works
 
