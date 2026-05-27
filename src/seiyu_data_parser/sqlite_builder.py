@@ -25,6 +25,26 @@ def _normalize_text(value: Any) -> str:
     return value.strip()
 
 
+def _compute_bigrams(name: str) -> Optional[str]:
+    """Compute bigrams (N=2) from a name without normalization.
+
+    Rules:
+    - Do not perform case normalization or Unicode normalization.
+    - Remove spaces before generating bigrams (so multi-word names are treated
+      as a contiguous sequence of characters).
+    - If the resulting string has length < 2, return None.
+    - Return a space-separated string of bigrams (e.g. "ab bc cd").
+    """
+    if not isinstance(name, str):
+        return None
+    s = name.replace(" ", "")
+    if len(s) < 2:
+        return None
+    # Generate overlapping bigrams
+    grams = [s[i : i + 2] for i in range(len(s) - 1)]
+    return " ".join(grams)
+
+
 def _hash_canonical_name(canonical_name: str) -> Optional[str]:
     """Generate a short, URL-safe hash for a canonical name.
 
@@ -70,6 +90,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS voice_actors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            -- name_ngrams stores space-separated bigrams (N=2) for the name
+            -- e.g. "あい いう うえ"
+            name_ngrams TEXT,
             canonical_name TEXT,
             canonical_name_hash TEXT
         );
@@ -121,6 +144,46 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_actor_work_roles_unique
             ON voice_actor_work_roles(mapping_id, role);
+
+        -- FTS5 table to index bigrams for fast partial-match search. Use an
+        -- external-content FTS5 table that references voice_actors so that
+        -- the FTS module can obtain column values and the special FTS5
+        -- commands can be used for delete/update operations. Bind the FTS
+        -- rowid to voice_actors.id.
+        CREATE VIRTUAL TABLE IF NOT EXISTS voice_actors_ngrams_fts USING fts5(
+            name_ngrams, content='voice_actors', content_rowid='id'
+        );
+
+        -- Triggers to keep the FTS table in sync with voice_actors.
+        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_insert
+        AFTER INSERT ON voice_actors
+        FOR EACH ROW
+        WHEN NEW.name_ngrams IS NOT NULL
+        BEGIN
+            INSERT INTO voice_actors_ngrams_fts(rowid, name_ngrams)
+            VALUES (NEW.id, NEW.name_ngrams);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_update_name
+        AFTER UPDATE OF name ON voice_actors
+        FOR EACH ROW
+        BEGIN
+            -- Remove old tokens from the FTS index using the special 'delete'
+            -- command, then insert the new tokens when present.
+            INSERT INTO voice_actors_ngrams_fts(voice_actors_ngrams_fts, rowid, name_ngrams)
+            VALUES('delete', OLD.id, OLD.name_ngrams);
+            INSERT INTO voice_actors_ngrams_fts(rowid, name_ngrams)
+            SELECT NEW.id, NEW.name_ngrams WHERE NEW.name_ngrams IS NOT NULL;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_delete
+        AFTER DELETE ON voice_actors
+        FOR EACH ROW
+        BEGIN
+            -- Use FTS5 delete command to remove index entries for the deleted row.
+            INSERT INTO voice_actors_ngrams_fts(voice_actors_ngrams_fts, rowid, name_ngrams)
+            VALUES('delete', OLD.id, OLD.name_ngrams);
+        END;
         """
     )
 
@@ -142,28 +205,34 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     canonical_name = _normalize_text(actor.get("canonical_name") or actor.get("wiki_title")) or None
     canonical_name_hash = _hash_canonical_name(canonical_name) if canonical_name else None
 
+    # Compute bigrams for the name (no normalization beyond space removal)
+    name_ngrams = _compute_bigrams(name)
+
     if canonical_name:
         # Prefer inserting/looking up by canonical_name (it's unique when present).
         conn.execute(
-            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name) VALUES (?, ?, ?)",
-            (canonical_name, canonical_name_hash, name),
+            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name, name_ngrams) VALUES (?, ?, ?, ?)",
+            (canonical_name, canonical_name_hash, name, name_ngrams),
         )
         # Ensure the record has a name if it was previously empty.
+        # Also ensure name_ngrams gets populated when a previously-empty
+        # record receives a name.
         conn.execute(
             """
             UPDATE voice_actors
-               SET name = COALESCE(NULLIF(name, ''), ?)
+               SET name = COALESCE(NULLIF(name, ''), ?),
+                   name_ngrams = COALESCE(NULLIF(name_ngrams, ''), ?)
              WHERE canonical_name = ?
             """,
-            (name, canonical_name),
+            (name, name_ngrams, canonical_name),
         )
         return _get_id(conn, "SELECT id FROM voice_actors WHERE canonical_name = ?", (canonical_name,))
     else:
         # Legacy path: no canonical_name provided. Insert by name (non-unique
         # names are allowed) and return the first matching id.
         conn.execute(
-            "INSERT OR IGNORE INTO voice_actors(name) VALUES (?)",
-            (name,),
+            "INSERT OR IGNORE INTO voice_actors(name, name_ngrams) VALUES (?, ?)",
+            (name, name_ngrams),
         )
         # Return one id that matches the name (order by id to be deterministic).
         return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ? ORDER BY id LIMIT 1", (name,))
