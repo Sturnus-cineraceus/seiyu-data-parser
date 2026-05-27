@@ -350,10 +350,6 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             results.append({
                 "media": media_name,
                 "title": title,
-                # Keep legacy `wiki_title` for compatibility and also set the
-                # new `canonical_name` key which represents the normalized
-                # unique person/entry name used elsewhere.
-                "wiki_title": wiki_title,
                 "canonical_name": wiki_title,
                 "roles": roles,
                 "year": year_val
