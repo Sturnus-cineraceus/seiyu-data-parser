@@ -87,7 +87,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             media TEXT NOT NULL,
             title TEXT NOT NULL,
-            wiki_title TEXT NOT NULL UNIQUE
+            canonical_name TEXT NOT NULL,
+            canonical_name_hash TEXT,
+            -- canonical_name is the primary identifier for works in the new schema
+            UNIQUE(canonical_name),
+            UNIQUE(canonical_name_hash)
         );
 
         CREATE TABLE IF NOT EXISTS voice_actor_work_mappings (
@@ -166,25 +170,38 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
 
 
 def _upsert_work(conn: sqlite3.Connection, media: str, title: str, wiki_title: str) -> int:
+    # New behavior: works are identified by canonical_name. The old wiki_title
+    # parameter is no longer used as the primary identifier. To preserve a
+    # small amount of context we accept the old "wiki_title" param as a
+    # fallback when canonical_name is not provided by callers, but callers in
+    # this codebase should pass canonical_name explicitly.
+    #
+    # For compatibility with the existing call sites in this file we allow the
+    # original signature but treat the passed-in wiki_title value as the
+    # canonical_name when callers didn't update yet.
     title = _normalize_text(title)
-    wiki_title = _normalize_text(wiki_title) or title
-    if not title or not wiki_title:
-        raise ValueError("work title is required")
+    canonical_name = _normalize_text(wiki_title) or title
+    if not title or not canonical_name:
+        raise ValueError("work title and canonical_name are required")
+
+    canonical_name_hash = _hash_canonical_name(canonical_name)
+
+    # Insert-or-ignore by canonical_name
     conn.execute(
-        "INSERT OR IGNORE INTO works(media, title, wiki_title) VALUES (?, ?, ?)",
-        (media, title, wiki_title),
+        "INSERT OR IGNORE INTO works(canonical_name, canonical_name_hash, media, title) VALUES (?, ?, ?, ?)",
+        (canonical_name, canonical_name_hash, media, title),
     )
-    if title:
-        conn.execute(
-            """
-            UPDATE works
-               SET title = COALESCE(NULLIF(title, ''), ?),
-                   media = COALESCE(NULLIF(media, ''), ?)
-             WHERE wiki_title = ?
-            """,
-            (title, media, wiki_title),
-        )
-    return _get_id(conn, "SELECT id FROM works WHERE wiki_title = ?", (wiki_title,))
+    # Ensure fields get populated/updated if the record already existed
+    conn.execute(
+        """
+        UPDATE works
+           SET media = COALESCE(NULLIF(media, ''), ?),
+               title = COALESCE(NULLIF(title, ''), ?)
+         WHERE canonical_name = ?
+        """,
+        (media, title, canonical_name),
+    )
+    return _get_id(conn, "SELECT id FROM works WHERE canonical_name = ?", (canonical_name,))
 
 
 def _iter_credits(works: Any) -> Iterable[Dict[str, Any]]:
@@ -218,10 +235,16 @@ def build_sqlite(input_json: str, output_db: str) -> None:
             for credit in _iter_credits(works):
                 media = _normalize_text(credit.get("media"))
                 title = _normalize_text(credit.get("title"))
-                wiki_title = _normalize_text(credit.get("wiki_title")) or title
-                if not media or not title or not wiki_title:
+                # Use canonical_name as the primary work identifier. Fall back
+                # to wiki_title or title only if canonical_name is missing.
+                canonical_name = (
+                    _normalize_text(credit.get("canonical_name"))
+                    or _normalize_text(credit.get("wiki_title"))
+                    or title
+                )
+                if not media or not title or not canonical_name:
                     continue
-                work_id = _upsert_work(conn, media, title, wiki_title)
+                work_id = _upsert_work(conn, media, title, canonical_name)
                 year = _normalize_year(credit.get("year"))
                 conn.execute(
                     """
