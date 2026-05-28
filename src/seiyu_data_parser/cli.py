@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from .io import open_bz2
 from .wikistream import iter_pages
 from . import extract
+from . import template_extract
 
 from . import media
 
@@ -58,18 +59,19 @@ def main():
 
             for page_xml in iter_pages(fh):
                 scanned += 1
-                title, cats = extract.extract_title_and_categories(page_xml)
+                title, cats, page_text = extract.extract_title_and_categories(page_xml)
                 if cats:
-                    section, level = extract.extract_section(page_xml, "出演")
-                    if section:
-                        with open("data/debug_detail.txt", "a", encoding="utf-8") as ddf:
-                            ddf.write(section + "\n\n")
-                    works = extract.parse_works_section(section, parent_level=level)
-                    # Provide new `canonical_name` (legacy wiki_title removed)
+                    # parse template and appearances separately and combine simply
+                    tpl = extract.parse_voice_template(page_xml)
+                    works = extract.parse_appearances(page_xml, section_name="出演")
                     result_item: Dict[str, Any] = {
                         "name": _strip_parenthetical(title),
                         "canonical_name": title,
                     }
+                    if tpl:
+                        for k in ("furigana", "birth_date", "agency", "official_site"):
+                            if tpl.get(k):
+                                result_item[k] = tpl.get(k)
                     if works:
                         result_item["works"] = works
 

@@ -224,3 +224,5 @@ CLINE_RULES.md
 *.json
 *.tmp
 .kilo/
+out_json
+voice_actor_new.sqlite

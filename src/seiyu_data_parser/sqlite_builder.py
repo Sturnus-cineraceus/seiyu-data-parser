@@ -72,6 +72,42 @@ def _normalize_year(value: Any) -> Optional[int]:
             return None
     return None
 
+def _normalize_date(value: Any) -> Optional[str]:
+    """
+    Normalize various date representations into ISO YYYY-MM-DD strings.
+    Accepts:
+      - ISO strings "YYYY-MM-DD"
+      - Common separators "YYYY/MM/DD", "YYYY.MM.DD"
+      - Year-only (int or "YYYY") -> returns "YYYY-01-01"
+    Returns None when input is empty or cannot be parsed.
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return f"{value:04d}-01-01"
+    if isinstance(value, str):
+        v = value.strip()
+        if not v:
+            return None
+        import re
+        from datetime import datetime
+
+        # Already ISO
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            return v
+        # Common alternate formats
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+            try:
+                return datetime.strptime(v, fmt).date().isoformat()
+            except ValueError:
+                pass
+        # Year-month or year-only fallbacks
+        if re.match(r"^\d{4}-\d{2}$", v):
+            return v + "-01"
+        if re.match(r"^\d{4}$", v):
+            return v + "-01-01"
+    return None
+
 
 def _load_actors(path: str) -> List[Dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as fh:
@@ -85,6 +121,46 @@ def _load_actors(path: str) -> List[Dict[str, Any]]:
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute("PRAGMA foreign_keys = ON")
+
+    # Additive migrations for existing databases: if the voice_actors table
+    # already exists, add the new optional columns so older DBs are upgraded
+    # in-place rather than requiring a full rebuild.
+    try:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info('voice_actors')").fetchall()}
+    except sqlite3.OperationalError:
+        existing = set()
+
+    if "furigana" not in existing:
+        try:
+            conn.execute("ALTER TABLE voice_actors ADD COLUMN furigana TEXT")
+        except sqlite3.OperationalError:
+            pass
+    if "furigana_ngrams" not in existing:
+        try:
+            conn.execute("ALTER TABLE voice_actors ADD COLUMN furigana_ngrams TEXT")
+        except sqlite3.OperationalError:
+            pass
+    if "agency" not in existing:
+        try:
+            conn.execute("ALTER TABLE voice_actors ADD COLUMN agency TEXT")
+        except sqlite3.OperationalError:
+            pass
+    if "agency_ngrams" not in existing:
+        try:
+            conn.execute("ALTER TABLE voice_actors ADD COLUMN agency_ngrams TEXT")
+        except sqlite3.OperationalError:
+            pass
+    if "official_site" not in existing:
+        try:
+            conn.execute("ALTER TABLE voice_actors ADD COLUMN official_site TEXT")
+        except sqlite3.OperationalError:
+            pass
+    if "birth_date" not in existing:
+        try:
+            conn.execute("ALTER TABLE voice_actors ADD COLUMN birth_date DATE")
+        except sqlite3.OperationalError:
+            pass
+
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS voice_actors (
@@ -94,7 +170,17 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             -- e.g. "あい いう うえ"
             name_ngrams TEXT,
             canonical_name TEXT,
-            canonical_name_hash TEXT
+            canonical_name_hash TEXT,
+            -- Optional phonetic reading and its ngrams
+            furigana TEXT,
+            furigana_ngrams TEXT,
+            -- Agency and its ngrams
+            agency TEXT,
+            agency_ngrams TEXT,
+            -- Official website URL
+            official_site TEXT,
+            -- Birth date stored in ISO YYYY-MM-DD (SQLite DATE affinity)
+            birth_date DATE
         );
 
         -- Unique indexes on canonical_name and its short hash. NULL values are
@@ -151,38 +237,39 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         -- commands can be used for delete/update operations. Bind the FTS
         -- rowid to voice_actors.id.
         CREATE VIRTUAL TABLE IF NOT EXISTS voice_actors_ngrams_fts USING fts5(
-            name_ngrams, content='voice_actors', content_rowid='id'
+            name_ngrams, furigana_ngrams, agency_ngrams, content='voice_actors', content_rowid='id'
         );
 
         -- Triggers to keep the FTS table in sync with voice_actors.
         CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_insert
         AFTER INSERT ON voice_actors
         FOR EACH ROW
-        WHEN NEW.name_ngrams IS NOT NULL
+        WHEN NEW.name_ngrams IS NOT NULL OR NEW.furigana_ngrams IS NOT NULL OR NEW.agency_ngrams IS NOT NULL
         BEGIN
-            INSERT INTO voice_actors_ngrams_fts(rowid, name_ngrams)
-            VALUES (NEW.id, NEW.name_ngrams);
+            INSERT INTO voice_actors_ngrams_fts(rowid, name_ngrams, furigana_ngrams, agency_ngrams)
+            VALUES (NEW.id, NEW.name_ngrams, NEW.furigana_ngrams, NEW.agency_ngrams);
         END;
 
-        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_update_name
-        AFTER UPDATE OF name ON voice_actors
+        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_update
+        AFTER UPDATE ON voice_actors
         FOR EACH ROW
         BEGIN
             -- Remove old tokens from the FTS index using the special 'delete'
             -- command, then insert the new tokens when present.
-            INSERT INTO voice_actors_ngrams_fts(voice_actors_ngrams_fts, rowid, name_ngrams)
-            VALUES('delete', OLD.id, OLD.name_ngrams);
-            INSERT INTO voice_actors_ngrams_fts(rowid, name_ngrams)
-            SELECT NEW.id, NEW.name_ngrams WHERE NEW.name_ngrams IS NOT NULL;
+            INSERT INTO voice_actors_ngrams_fts(voice_actors_ngrams_fts, rowid, name_ngrams, furigana_ngrams, agency_ngrams)
+            VALUES('delete', OLD.id, OLD.name_ngrams, OLD.furigana_ngrams, OLD.agency_ngrams);
+            INSERT INTO voice_actors_ngrams_fts(rowid, name_ngrams, furigana_ngrams, agency_ngrams)
+            SELECT NEW.id, NEW.name_ngrams, NEW.furigana_ngrams, NEW.agency_ngrams
+            WHERE NEW.name_ngrams IS NOT NULL OR NEW.furigana_ngrams IS NOT NULL OR NEW.agency_ngrams IS NOT NULL;
         END;
 
-        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_fts_after_delete
+        CREATE TRIGGER IF NOT EXISTS trg_voice_actors_ngrams_fts_after_delete
         AFTER DELETE ON voice_actors
         FOR EACH ROW
         BEGIN
             -- Use FTS5 delete command to remove index entries for the deleted row.
-            INSERT INTO voice_actors_ngrams_fts(voice_actors_ngrams_fts, rowid, name_ngrams)
-            VALUES('delete', OLD.id, OLD.name_ngrams);
+            INSERT INTO voice_actors_ngrams_fts(voice_actors_ngrams_fts, rowid, name_ngrams, furigana_ngrams, agency_ngrams)
+            VALUES('delete', OLD.id, OLD.name_ngrams, OLD.furigana_ngrams, OLD.agency_ngrams);
         END;
         """
     )
@@ -208,31 +295,43 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     # Compute bigrams for the name (no normalization beyond space removal)
     name_ngrams = _compute_bigrams(name)
 
+    # New optional fields
+    furigana = _normalize_text(actor.get("furigana"))
+    furigana_ngrams = _compute_bigrams(furigana) if furigana else None
+    agency = _normalize_text(actor.get("agency"))
+    agency_ngrams = _compute_bigrams(agency) if agency else None
+    official_site = _normalize_text(actor.get("official_site"))
+    birth_date = _normalize_date(actor.get("birth_date"))
+
     if canonical_name:
         # Prefer inserting/looking up by canonical_name (it's unique when present).
         conn.execute(
-            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name, name_ngrams) VALUES (?, ?, ?, ?)",
-            (canonical_name, canonical_name_hash, name, name_ngrams),
+            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (canonical_name, canonical_name_hash, name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date),
         )
-        # Ensure the record has a name if it was previously empty.
-        # Also ensure name_ngrams gets populated when a previously-empty
-        # record receives a name.
+        # Ensure the record has fields populated when they were previously empty.
         conn.execute(
             """
             UPDATE voice_actors
                SET name = COALESCE(NULLIF(name, ''), ?),
-                   name_ngrams = COALESCE(NULLIF(name_ngrams, ''), ?)
+                   name_ngrams = COALESCE(NULLIF(name_ngrams, ''), ?),
+                   furigana = COALESCE(NULLIF(furigana, ''), ?),
+                   furigana_ngrams = COALESCE(NULLIF(furigana_ngrams, ''), ?),
+                   agency = COALESCE(NULLIF(agency, ''), ?),
+                   agency_ngrams = COALESCE(NULLIF(agency_ngrams, ''), ?),
+                   official_site = COALESCE(NULLIF(official_site, ''), ?),
+                   birth_date = COALESCE(NULLIF(birth_date, ''), ?)
              WHERE canonical_name = ?
             """,
-            (name, name_ngrams, canonical_name),
+            (name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date, canonical_name),
         )
         return _get_id(conn, "SELECT id FROM voice_actors WHERE canonical_name = ?", (canonical_name,))
     else:
         # Legacy path: no canonical_name provided. Insert by name (non-unique
         # names are allowed) and return the first matching id.
         conn.execute(
-            "INSERT OR IGNORE INTO voice_actors(name, name_ngrams) VALUES (?, ?)",
-            (name, name_ngrams),
+            "INSERT OR IGNORE INTO voice_actors(name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date),
         )
         # Return one id that matches the name (order by id to be deterministic).
         return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ? ORDER BY id LIMIT 1", (name,))

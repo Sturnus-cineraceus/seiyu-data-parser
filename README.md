@@ -35,8 +35,12 @@ python seiyu_data_parser_sqlite.py voice_actor.json -o voice_actor.sqlite3
 - `voice_actors`
 - `works`
 - `voice_actor_work_mappings`
-`voice_actors` には URL 用の `canonical_name_hash` も含まれ、`canonical_name_hash` にユニークインデックスが張られます。
-`works` は `wiki_title` を一意キーとして扱い、`title` には表示用の作品名を保持します。
+- `voice_actor_work_roles`
+- `voice_actors_ngrams_fts` (FTS5)
+
+`voice_actors` には検索用に name_ngrams（バイグラム）列と canonical_name_hash（URL 用の短縮ハッシュ）を含み、`canonical_name` と `canonical_name_hash` にユニークインデックスが張られます。
+`works` は内部的には `canonical_name` を作品の一意識別子として扱い、`canonical_name_hash` を保持します。表示用の作品名は `title` に格納します。
+
 
 テーブル定義
 
@@ -48,8 +52,11 @@ voice_actors
 |---|---:|:---:|---|---|
 | id | integer | No | 自動採番される主キー | 1 |
 | name | text | No | 声優の表示名（ユニークではない） | "花澤香菜" |
-| canonical_name | text | Yes | 正規化されたフルネーム（例: Wikipedia タイトル）。存在することが前提。 | "Hanazawa_Kana" |
+| name_ngrams | text | Yes | 名前から生成したバイグラム（スペース区切り）。FTS インデックス用。例: "あい いう" | "あい いう" |
+| canonical_name | text | Yes | 正規化されたフルネーム（既に存在する場合は一意） | "Hanazawa_Kana" |
 | canonical_name_hash | text | Yes | canonical_name の短縮ハッシュ（URL 用、ユニークインデックス） | "XyZ123..." |
+
+-- 付記: `canonical_name` と `canonical_name_hash` にはそれぞれユニークインデックスが作られます（NULL は許容されます）。
 
 works
 
@@ -58,7 +65,8 @@ works
 | id | integer | No | 自動採番される主キー | 10 |
 | media | text | No | メディア種別（例: TV, 映画, ゲーム 等） | "TV" |
 | title | text | No | 表示用の作品タイトル | "進撃の巨人" |
-| wiki_title | text | No | 作品の Wikipedia タイトル（ユニークキー） | "Shingeki_no_Kyojin" |
+| canonical_name | text | No | 作品の一意識別子。内部的に主要なキーとして扱う（UNIQUE）。 | "Shingeki_no_Kyojin" |
+| canonical_name_hash | text | Yes | canonical_name の短縮ハッシュ（URL 用、ユニークインデックス） | "AbC456..." |
 
 voice_actor_work_mappings
 
@@ -69,6 +77,8 @@ voice_actor_work_mappings
 | work_id | integer | No | works.id への外部キー | 10 |
 | year | integer | Yes | クレジットにある年（不明なら NULL） | 2019 |
 
+-- 付記: (voice_actor_id, work_id, COALESCE(year, -1)) に対するユニークインデックスがあり、年が不明な場合の重複を扱います。
+
 voice_actor_work_roles
 
 | Column | Type | Nullable | Description | Example |
@@ -76,6 +86,13 @@ voice_actor_work_roles
 | id | integer | No | 自動採番される主キー | 1000 |
 | mapping_id | integer | No | voice_actor_work_mappings.id への外部キー | 100 |
 | role | text | No | 役名（同一 mapping に複数行あり得る） | "エレン・イェーガー" |
+
+-- 付記: mapping_id と role の組にユニークインデックスがあります。
+
+FTS / 検索補助テーブル
+
+- `voice_actors_ngrams_fts` (FTS5, external content): name_ngrams をインデックス化するための仮想テーブルです。voice_actors の rowid を content_rowid としてバインドし、INSERT/UPDATE/DELETE 用のトリガで同期されます。
+
 
 注意
 

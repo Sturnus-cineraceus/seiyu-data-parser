@@ -1,22 +1,24 @@
 import re
 import xml.etree.ElementTree as ET
-from typing import Tuple, List
+from typing import Tuple, List, Optional, Dict, Any
+from . import template_extract
 
 TARGET_CATEGORIES = [
     "日本の男性声優",
     "日本の女性声優",
 ]
 
-def extract_title_and_categories(page_xml: str) -> Tuple[str, List[str]]:
+def extract_title_and_categories(page_xml: str) -> Tuple[str, List[str], str]:
     """
-    Robustly parse a <page> XML string and return (title, [matched category names]).
+    Robustly parse a <page> XML string and return (title, [matched category names], text).
     Handles XML namespaces by matching local-name of tags.
+    Returns the page text as the third element to allow downstream template parsing.
     """
     try:
         root = ET.fromstring(page_xml)
     except ET.ParseError:
-        return ("", [])
-
+        return ("", [], "")
+ 
     title = ""
     text = ""
     # find title and text elements by local-name to avoid namespace issues
@@ -26,12 +28,12 @@ def extract_title_and_categories(page_xml: str) -> Tuple[str, List[str]]:
             title = elem.text.strip()
         elif tag == "text" and elem.text:
             text = elem.text
-
+ 
     matched: List[str] = []
     for cat in TARGET_CATEGORIES:
         if f"[[Category:{cat}" in text:
             matched.append(cat)
-    return title, matched
+    return title, matched, text
 
 def extract_section(page_xml: str, section_name: str = "出演") -> Tuple[str, int]:
     """
@@ -64,6 +66,208 @@ def extract_section(page_xml: str, section_name: str = "出演") -> Tuple[str, i
     nm = next_re.search(text, start)
     body = text[start:nm.start()] if nm else text[start:]
     return body, level
+
+
+def parse_voice_template(page_input: str) -> Optional[Dict[str, Any]]:
+    """
+    Accept either a page XML string or raw wiki markup text.
+    If an XML <page> is provided, extract the text element; otherwise treat input as raw text.
+    Returns a dict with template fields (may include inferred birth_date/agency/official_site) or None.
+    """
+    # extract raw wikitext
+    text = ""
+    if isinstance(page_input, str) and ("<page" in page_input or "<text" in page_input or page_input.strip().startswith("<?xml")):
+        try:
+            root = ET.fromstring(page_input)
+            for elem in root.iter():
+                tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+                if tag == "text" and elem.text:
+                    text = elem.text
+                    break
+        except ET.ParseError:
+            text = page_input
+    else:
+        text = page_input or ""
+
+    if not text:
+        return None
+
+    # try using existing template extractor if available
+    templates = []
+    try:
+        templates = template_extract.extract_voice_actor_dicts(text) or []
+    except Exception:
+        templates = []
+
+    # pick candidate template (first with useful fields, else first)
+    candidate = None
+    for tpl in templates:
+        if tpl and (tpl.get("name") or tpl.get("furigana") or tpl.get("agency") or tpl.get("official_site")):
+            candidate = tpl
+            break
+    if candidate is None and templates:
+        candidate = templates[0]
+
+    # helper: parse raw {{声優 ...}} block to extract missing fields
+    def _parse_raw_voice_template_block(wikitext: str) -> Dict[str, str]:
+        """
+        Find the full {{声優 ... }} block using balanced-brace scanning to tolerate nested templates,
+        then extract lines of the form "| key = value" into a dict.
+        """
+        out: Dict[str, str] = {}
+        if not wikitext:
+            return out
+        start_idx = wikitext.find("{{声優")
+        if start_idx == -1:
+            return out
+        # scan forward to find matching closing "}}", accounting for nested {{ }}
+        i = start_idx
+        depth = 0
+        end_idx = -1
+        L = len(wikitext)
+        while i < L - 1:
+            if wikitext[i:i+2] == "{{":
+                depth += 1
+                i += 2
+                continue
+            if wikitext[i:i+2] == "}}":
+                depth -= 1
+                i += 2
+                if depth == 0:
+                    end_idx = i
+                    break
+                continue
+            i += 1
+        if end_idx == -1:
+            # fallback: try a permissive regex if balancing failed
+            m = re.search(r'\{\{声優[\s\S]*?\}\}', wikitext, flags=re.S)
+            if not m:
+                return out
+            block = m.group(0)
+        else:
+            block = wikitext[start_idx:end_idx]
+
+        # split lines and extract "| key = value"
+        for line in block.splitlines():
+            lm = re.match(r'^\s*\|\s*([^=|]+?)\s*=\s*(.*)$', line)
+            if not lm:
+                continue
+            key = lm.group(1).strip()
+            val = lm.group(2).strip()
+            # remove trailing template closers carefully
+            val = re.sub(r'\}\}\s*$', '', val).strip()
+            out[key] = val
+        return out
+
+    # attempt to fill missing fields from raw block
+    raw_fields = _parse_raw_voice_template_block(text)
+
+    def _unwrap_url(s: Optional[str]) -> str:
+        # [https://example.com Label] or plain url
+        if not s:
+            return ""
+        m = re.search(r'\[?(https?://[^\s\]\)]+)', s)
+        return m.group(1) if m else ""
+
+    def _unwrap_wikilink(s: Optional[str]) -> str:
+        # [[Name|Label]] or [[Name]]
+        s = s or ""
+        m = re.search(r'\[\[([^|\]]+)(?:\|([^]]+))?\]\]', s)
+        if m:
+            return m.group(1).strip()
+        return re.sub(r'[{}\[\]]', '', s).strip()
+
+    # build result starting from candidate if any
+    result: Dict[str, Any] = {}
+    if candidate and isinstance(candidate, dict):
+        result.update(candidate)
+
+    # fill name/furigana from raw if missing
+    if (not result.get("name")) and raw_fields.get("名前"):
+        result["name"] = re.sub(r'\s+', ' ', _unwrap_wikilink(raw_fields.get("名前")))
+    if (not result.get("furigana")) and raw_fields.get("ふりがな"):
+        result["furigana"] = re.sub(r'\s+', ' ', raw_fields.get("ふりがな") or "")
+
+    # birth date: prefer direct field, else combine 生年/生月/生日
+    if not result.get("birth_date"):
+        if raw_fields.get("生年月日"):
+            bd = raw_fields.get("生年月日")
+            result["birth_date"] = re.sub(r'\s+', ' ', bd or "")
+        else:
+            y = raw_fields.get("生年") or raw_fields.get("年")
+            mth = raw_fields.get("生月") or raw_fields.get("月")
+            d = raw_fields.get("生日") or raw_fields.get("日")
+            if y:
+                try:
+                    yv = int(re.sub(r'\D', '', y))
+                    mv = int(re.sub(r'\D', '', mth)) if mth else 1
+                    dv = int(re.sub(r'\D', '', d)) if d else 1
+                    result["birth_date"] = f"{yv:04d}-{mv:02d}-{dv:02d}"
+                except Exception:
+                    # fallback to concatenated raw
+                    parts = [p for p in (y, mth, d) if p]
+                    if parts:
+                        result["birth_date"] = '-'.join(parts)
+
+    # agency
+    if not result.get("agency"):
+        if raw_fields.get("事務所"):
+            result["agency"] = _unwrap_wikilink(raw_fields.get("事務所"))
+        elif raw_fields.get("所属"):
+            result["agency"] = _unwrap_wikilink(raw_fields.get("所属"))
+
+    # official site
+    if not result.get("official_site") and raw_fields.get("公式サイト"):
+        # value may be like: [https://... Label] or just URL or single bracket
+        url = _unwrap_url(raw_fields.get("公式サイト"))
+        if url:
+            result["official_site"] = url
+
+    # final normalization: normalize furigana (collapse spaces) and sanitize suspicious values
+    if result.get("furigana"):
+        result["furigana"] = re.sub(r'\s+', ' ', result["furigana"]).strip()
+        # discard if value looks like another field or contains '|' or '=' or image/file keywords
+        if re.search(r'[=\|]|画像|ファイル', result["furigana"]):
+            result.pop("furigana", None)
+
+    return result if result else None
+
+
+def parse_appearances(page_input: str, section_name: str = "出演") -> List[Dict[str, Any]]:
+    """
+    Accept either a page XML string or raw wiki markup text and return parsed works list.
+    Uses existing extract_section + parse_works_section when input is XML; falls back to
+    extracting the section directly from raw text when given plain wikitext.
+    """
+    text = ""
+    # if xml-like, extract <text>
+    if isinstance(page_input, str) and ("<page" in page_input or "<text" in page_input or page_input.strip().startswith("<?xml")):
+        try:
+            root = ET.fromstring(page_input)
+            for elem in root.iter():
+                tag = elem.tag.rsplit("}", 1)[-1] if "}" in elem.tag else elem.tag
+                if tag == "text" and elem.text:
+                    text = elem.text
+                    break
+        except ET.ParseError:
+            text = page_input
+    else:
+        text = page_input or ""
+
+    if not text:
+        return []
+
+    # reuse existing section extraction logic but on raw text
+    header_re = re.compile(r'(?m)^(?P<underline>={2,})\s*' + re.escape(section_name) + r'\s*(?P=underline)\s*$')
+    m = header_re.search(text)
+    if not m:
+        return []
+    level = len(m.group('underline'))
+    start = m.end()
+    next_re = re.compile(r'(?m)^[=]{' + str(level) + r'}\s.*[=]{' + str(level) + r'}\s*$')
+    nm = next_re.search(text, start)
+    body = text[start:nm.start()] if nm else text[start:]
+    return parse_works_section(body, parent_level=level)
 
 def _clean_text(s: str) -> str:
     # remove ref tags
