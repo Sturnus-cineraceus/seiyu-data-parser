@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import re
+import html
 from typing import Optional, Dict, Any, List
 
 TEMPLATE_RE = re.compile(r'\{\{声優(.*?)\}\}', re.S)
 FIELD_RE = re.compile(r'^\s*\|\s*([^=|]+?)\s*=\s*(.+)$', re.M)
 LINK_RE = re.compile(r'\[\[(?:[^|\]]*\|)?([^\]]+)\]\]')
 URL_BRACKET_RE = re.compile(r'\[([^ ]+)(?: [^\]]+)?\]')
-TAG_RE = re.compile(r'<ref.*?>.*?</ref>|<br\s*/?>', re.S)
+# robust ref/tag remover: handles attributes, self-closing refs, and <br />
+TAG_RE = re.compile(r'<ref\b[^>]*?>.*?</ref>|<ref\b[^>]*/?>|<br\s*/?>', re.S | re.I)
 
 def normalize_furigana(s: Optional[str]) -> Optional[str]:
     if s is None:
@@ -20,20 +22,36 @@ def normalize_furigana(s: Optional[str]) -> Optional[str]:
 def strip_markup(s: Optional[str]) -> Optional[str]:
     if s is None:
         return None
+    # unescape HTML entities first so escaped tags become matchable
+    try:
+        s = html.unescape(s)
+    except Exception:
+        pass
+    # remove ref blocks and simple <br/>
     s = TAG_RE.sub('', s)
-    s = re.sub(r'\{\{.*?\}\}', '', s)
+    # remove templates like {{...}} (non-greedy)
+    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
+    # unwrap wikilinks [[A|B]] -> B
     s = LINK_RE.sub(r'\\1', s)
-    s = s.strip()
+    # remove any remaining HTML tags
+    s = re.sub(r'<[^>]+>', '', s)
+    # remove stray angle brackets and isolated 'ref' tokens
+    s = s.replace('<', '').replace('>', '')
+    s = re.sub(r'\bref\b', '', s, flags=re.I)
+    # collapse whitespace and trim
+    s = re.sub(r'\s+', ' ', s).strip()
     return s
 
 def parse_birth(fields: Dict[str, str]) -> Optional[str]:
     year = fields.get('生年') or fields.get('生年 ')
     month = fields.get('生月') or fields.get('生月 ')
     day = fields.get('生日') or fields.get('生日 ')
+    if not year or not month or not day:
+        return None
     try:
-        y = int(year)
-        m = int(month)
-        d = int(day)
+        y = int(re.sub(r'\D', '', str(year)))
+        m = int(re.sub(r'\D', '', str(month)))
+        d = int(re.sub(r'\D', '', str(day)))
         return f"{y:04d}-{m:02d}-{d:02d}"
     except Exception:
         return None

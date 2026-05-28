@@ -270,14 +270,31 @@ def parse_appearances(page_input: str, section_name: str = "出演") -> List[Dic
     return parse_works_section(body, parent_level=level)
 
 def _clean_text(s: str) -> str:
-    # remove ref tags
-    s = re.sub(r'<ref.*?>.*?</ref>', '', s, flags=re.S)
+    import html
+    if not s:
+        return ""
+    # unescape first so escaped tags become matchable
+    try:
+        s = html.unescape(s)
+    except Exception:
+        pass
+    # remove <ref ...>...</ref> and self-closing <ref/>
+    s = re.sub(r'<ref\b[^>]*?>.*?</ref>|<ref\b[^>]*/?>', '', s, flags=re.S | re.I)
+    # remove templates like {{...}} (non-greedy)
+    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
     # remove bold/italic markup
     s = re.sub(r"'{2,}", '', s)
-    # remove HTML tags
-    s = re.sub(r'<.*?>', '', s)
-    # remove simple templates (non-greedy)
-    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
+    # remove any remaining HTML tags
+    s = re.sub(r'<[^>]+>', '', s)
+    # remove isolated 'ref' tokens and stray angle brackets
+    s = re.sub(r'\bref\b', '', s, flags=re.I)
+    s = s.replace('<', '').replace('>', '')
+    # final unescape and collapse whitespace
+    try:
+        s = html.unescape(s)
+    except Exception:
+        pass
+    s = re.sub(r'\s+', ' ', s)
     return s.strip()
 
 
@@ -551,11 +568,29 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
 
             wiki_title = chosen
             year_val = current_year if current_year is not None else ""
+            # strip remaining markup from title, canonical_name and roles
+            clean_title = template_extract.strip_markup(title) or ""
+            clean_title = re.sub(r'[<>]', '', clean_title).strip()
+            clean_title = re.sub(r'\bref\b', '', clean_title, flags=re.I).strip()
+            clean_canonical = template_extract.strip_markup(wiki_title) or ""
+            clean_canonical = re.sub(r'[<>]', '', clean_canonical).strip()
+            clean_canonical = re.sub(r'\bref\b', '', clean_canonical, flags=re.I).strip()
+            clean_roles = []
+            for r in roles:
+                if not r:
+                    continue
+                rr = template_extract.strip_markup(r)
+                if not rr:
+                    continue
+                rr = re.sub(r'[<>]', '', rr).strip()
+                rr = re.sub(r'\bref\b', '', rr, flags=re.I).strip()
+                if rr:
+                    clean_roles.append(rr)
             results.append({
                 "media": media_name,
-                "title": title,
-                "canonical_name": wiki_title,
-                "roles": roles,
+                "title": clean_title,
+                "canonical_name": clean_canonical,
+                "roles": clean_roles,
                 "year": year_val
             })
 
