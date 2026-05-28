@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import re
+import html
 from typing import Any, Dict, List
 from .io import open_bz2
 from .wikistream import iter_pages
@@ -11,6 +12,38 @@ from . import template_extract
 
 from . import media
 
+# normalization utilities to strip HTML comments, <ref> tags, templates, and HTML entities
+_comment_re = re.compile(r'<!--.*?-->|<!--.*', re.S)
+_ref_re = re.compile(r'<ref\\b[^>]*?>.*?</ref>|<ref\\b[^>]*?>.*', re.S | re.I)
+_ref_self_re = re.compile(r'<ref\\b[^>]*/>', re.I)
+_tag_re = re.compile(r'<[^>]+>')
+_template_re = re.compile(r'{{.*?}}', re.S)
+
+def normalize_text(s: str) -> str:
+    if not s or not isinstance(s, str):
+        return s
+    prev = None
+    while s != prev:
+        prev = s
+        s = html.unescape(s)
+    s = _ref_re.sub('', s)
+    s = _ref_self_re.sub('', s)
+    s = _comment_re.sub('', s)
+    s = _template_re.sub('', s)
+    s = _tag_re.sub('', s)
+    s = html.unescape(s)
+    s = s.replace('->', '')
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+def normalize_value(v):
+    if isinstance(v, str):
+        return normalize_text(v)
+    if isinstance(v, dict):
+        return {k: normalize_value(val) for k, val in v.items()}
+    if isinstance(v, list):
+        return [normalize_value(x) for x in v]
+    return v
 
 def _strip_parenthetical(title: str) -> str:
     """Remove half-width and full-width parentheses and their contents from a wiki title.
@@ -84,6 +117,8 @@ def main():
                         for actor in buffer:
                             # centralize media normalization/filtering/grouping
                             actor = media.process_actor(actor)
+                            # normalize actor strings to remove comments/ref tags before dumping
+                            actor = normalize_value(actor)
                             # write actor JSON into stream, manage commas, pretty-print
                             actor_json = json.dumps(actor, ensure_ascii=False, indent=2)
                             indented = '\n'.join('  ' + l for l in actor_json.splitlines())
@@ -105,6 +140,8 @@ def main():
             if buffer:
                 for actor in buffer:
                     actor = media.process_actor(actor)
+                    # normalize actor strings to remove comments/ref tags before dumping
+                    actor = normalize_value(actor)
                     # write actor JSON into stream, pretty-print
                     actor_json = json.dumps(actor, ensure_ascii=False, indent=2)
                     indented = '\n'.join('  ' + l for l in actor_json.splitlines())

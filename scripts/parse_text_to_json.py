@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import re
+import html
 from typing import List, Dict, Any
 import os as _os
 import sys as _sys
@@ -23,20 +24,36 @@ def sanitize_name(name: str) -> str:
         return ''
     return re.sub(r'[^\w\-]+', '_', name)
 
-# remove HTML comments, <ref>...</ref> and self-closing <ref/> and other tags
-_comment_re = re.compile(r'<!--.*?-->', re.S)
-_ref_re = re.compile(r'<ref\b[^>]*>.*?</ref>', re.S | re.I)
+# remove HTML comments, <ref>...</ref> (including unterminated cases), self-closing <ref/> and other tags
+_comment_re = re.compile(r'<!--.*?-->|<!--.*', re.S)
+_ref_re = re.compile(r'<ref\b[^>]*?>.*?</ref>|<ref\b[^>]*?>.*', re.S | re.I)
 _ref_self_re = re.compile(r'<ref\b[^>]*/>', re.I)
 _tag_re = re.compile(r'<[^>]+>')
+# simple non-nesting template removal (removes {{...}}); improves cleanliness but may be tuned
+_template_re = re.compile(r'{{.*?}}', re.S)
 
 def normalize_text(s: str) -> str:
     if not s or not isinstance(s, str):
         return s
-    s = _comment_re.sub('', s)
+    # repeatedly unescape until stable to handle nested/escaped entities
+    prev = None
+    while s != prev:
+        prev = s
+        s = html.unescape(s)
+    # remove <ref> blocks (including unterminated), then self-closing refs
     s = _ref_re.sub('', s)
     s = _ref_self_re.sub('', s)
+    # remove HTML comments (including unterminated)
+    s = _comment_re.sub('', s)
+    # remove simple templates like {{...}} (non-nesting)
+    s = _template_re.sub('', s)
     # remove any remaining HTML-like tags
     s = _tag_re.sub('', s)
+    # final unescape to convert entities like > -> >
+    s = html.unescape(s)
+    # remove common leftover arrow artifacts like "->" produced from >
+    s = s.replace('->', '')
+    # normalize whitespace
     s = re.sub(r'\s+', ' ', s).strip()
     return s
 
