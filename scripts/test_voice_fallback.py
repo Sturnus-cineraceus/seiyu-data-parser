@@ -1,7 +1,7 @@
 import sys
 from pprint import pprint
 sys.path.insert(0, 'src')
-from seiyu_data_parser.extract import extract_section, parse_works_section
+from seiyu_data_parser.extract import extract_section, parse_works_section, _parse_item_line
 
 def test_voice_fallback():
     with open('data/test.txt', 'r', encoding='utf-8') as f:
@@ -15,5 +15,13 @@ def test_voice_fallback():
     assert any('ヤスオ' in role for r in ova for role in r['roles']), '役名ヤスオが抽出されていません'
     print('OK: fallback roles extracted')
 
+
+def test_nested_parentheses_role_normalization():
+    title, roles = _parse_item_line('クッキングパパ（吉岡（荒岩）カツ代）')
+    assert title == 'クッキングパパ', f'タイトル抽出失敗: {title}'
+    assert roles == ['吉岡カツ代'], f'役名抽出失敗: {roles}'
+    print('OK: nested parentheses role normalized')
+
 if __name__ == '__main__':
     test_voice_fallback()
+    test_nested_parentheses_role_normalization()

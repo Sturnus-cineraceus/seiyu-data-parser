@@ -174,8 +174,8 @@ def parse_voice_template(page_input: str) -> Optional[Dict[str, Any]]:
         s = s or ""
         m = re.search(r'\[\[([^|\]]+)(?:\|([^]]+))?\]\]', s)
         if m:
-            return m.group(1).strip()
-        return re.sub(r'[{}\[\]]', '', s).strip()
+            return template_extract.strip_markup(m.group(1)) or ""
+        return template_extract.strip_markup(s) or ""
 
     # build result starting from candidate if any
     result: Dict[str, Any] = {}
@@ -297,8 +297,8 @@ def _clean_text(s: str) -> str:
         pass
     # remove <ref ...>...</ref> and self-closing <ref/>
     s = re.sub(r'<ref\b[^>]*?>.*?</ref>|<ref\b[^>]*/?>', '', s, flags=re.S | re.I)
-    # remove templates like {{...}} (non-greedy)
-    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
+    # remove templates like {{...}}, including nested forms
+    s = template_extract.strip_templates(s) or ""
     # remove bold/italic markup
     s = re.sub(r"'{2,}", '', s)
     # remove any remaining HTML tags
@@ -418,15 +418,67 @@ def _parse_item_line(line: str):
     Returns (title, [roles]).
     """
     line = line.strip()
+    # remove trailing note markers like "※田中雪弥名義"
+    line = re.sub(r'\s*※.*$', '', line).strip()
 
-    # Find the first parenthesized segment anywhere in the line (full-width and ASCII parens).
-    m_par = re.search(r'[（(](.*?)[)）]', line)
-    if m_par:
-        par = (m_par.group(1) or '').strip()
-        # Remove the parenthesized segment but keep text before and after it as the title.
-        before = line[:m_par.start()].strip()
-        after = line[m_par.end():].strip()
-        title = (before + ' ' + after).strip()
+    def _looks_like_year_or_date_segment(s: str) -> bool:
+        s = re.sub(r'\s+', '', s or '')
+        if not s:
+            return False
+        return bool(
+            re.fullmatch(r'\d{4}(?:年)?', s)
+            or re.fullmatch(r'\d{4}(?:年)?[-–—~〜]\d{4}(?:年)?', s)
+            or re.fullmatch(r'\d{1,2}月(?:\d{1,2}日)?', s)
+            or re.fullmatch(r'\d{1,2}日', s)
+        )
+
+    def _find_trailing_parenthesized_segment(s: str):
+        s = (s or '').rstrip()
+        if not s or s[-1] not in '）)':
+            return None
+        depth = 0
+        for i in range(len(s) - 1, -1, -1):
+            ch = s[i]
+            if ch in '）)':
+                depth += 1
+            elif ch in '（(' and depth > 0:
+                depth -= 1
+                if depth == 0:
+                    return i, len(s), s[i + 1:len(s) - 1]
+        return None
+
+    # Pick the right-most role-like parenthesized segment near the line tail.
+    # This avoids consuming title-side parentheses such as "（第1作）" in link labels.
+    selected = None
+    trailing_par = _find_trailing_parenthesized_segment(line)
+    if trailing_par:
+        seg_start, seg_end, seg_text = trailing_par
+        cand = re.sub(r'〈.*?〉', '', (seg_text or '')).strip()
+        if cand and not _looks_like_year_or_date_segment(cand):
+            selected = {"start": seg_start, "end": seg_end, "text": seg_text}
+
+    if not selected:
+        par_matches = list(re.finditer(r'[（(](.*?)[)）]', line))
+        for m_par in reversed(par_matches):
+            tail = (line[m_par.end():] or '').strip()
+            # accept only trailing role segment: suffix must be empty or note marker
+            if tail and not tail.startswith('※'):
+                continue
+            cand = (m_par.group(1) or '').strip()
+            cand = re.sub(r'〈.*?〉', '', cand).strip()
+            if not cand:
+                continue
+            if _looks_like_year_or_date_segment(cand):
+                continue
+            selected = {"start": m_par.start(), "end": m_par.end(), "text": m_par.group(1)}
+            break
+
+    if selected:
+        par = (selected["text"] or '').strip()
+        # Remove only the selected role segment and keep title-side parentheses intact.
+        before = line[:selected["start"]].strip()
+        after = line[selected["end"]:].strip()
+        title = (before + after).strip()
     else:
         par = ''
         title = line
@@ -443,8 +495,8 @@ def _parse_item_line(line: str):
             p = p.strip()
             # Remove inline angle-bracket annotations (e.g. 〈第2話Aパート〉) before numeric checks
             p_clean = re.sub(r'〈.*?〉', '', p).strip()
-            # Skip segments that look like years or ranges (contain digits, '年' or hyphen)
-            if re.search(r'\d|年|-', p_clean):
+            # Skip only explicit year/date-like segments; keep numeric role names (e.g. "009").
+            if _looks_like_year_or_date_segment(p_clean):
                 continue
             if not p_clean:
                 continue
@@ -496,6 +548,11 @@ def _parse_item_line(line: str):
     normalized = []
     for r in roles:
         nr = ROLE_PREFIX_RE.sub('', r).strip()
+        prev = None
+        while prev != nr:
+            prev = nr
+            nr = re.sub(r'[（(][^()（）]*[)）]', '', nr)
+        nr = re.sub(r'\s+', ' ', nr).strip()
         if nr:
             normalized.append(nr)
     roles = normalized

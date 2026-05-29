@@ -17,7 +17,6 @@ _comment_re = re.compile(r'<!--.*?-->|<!--.*', re.S)
 _ref_re = re.compile(r'<ref\\b[^>]*?>.*?</ref>|<ref\\b[^>]*?>.*', re.S | re.I)
 _ref_self_re = re.compile(r'<ref\\b[^>]*/>', re.I)
 _tag_re = re.compile(r'<[^>]+>')
-_template_re = re.compile(r'{{.*?}}', re.S)
 
 def normalize_text(s: str) -> str:
     if not s or not isinstance(s, str):
@@ -29,7 +28,7 @@ def normalize_text(s: str) -> str:
     s = _ref_re.sub('', s)
     s = _ref_self_re.sub('', s)
     s = _comment_re.sub('', s)
-    s = _template_re.sub('', s)
+    s = template_extract.strip_templates(s) or ""
     s = _tag_re.sub('', s)
     s = html.unescape(s)
     s = s.replace('->', '')

@@ -11,6 +11,25 @@ URL_BRACKET_RE = re.compile(r'\[([^ ]+)(?: [^\]]+)?\]')
 # robust ref/tag remover: handles attributes, self-closing refs, and <br />
 TAG_RE = re.compile(r'<ref\b[^>]*?>.*?</ref>|<ref\b[^>]*/?>|<br\s*/?>', re.S | re.I)
 
+def strip_templates(s: Optional[str]) -> Optional[str]:
+    """Remove template blocks like {{...}}, including nested templates."""
+    if s is None:
+        return None
+    out = s
+    prev = None
+    # Repeatedly remove innermost templates until stable.
+    while out != prev:
+        prev = out
+        out = re.sub(r'\{\{[^{}]*\}\}', '', out)
+    # Also drop malformed trailing fragments like "{{R|...".
+    while True:
+        cleaned = re.sub(r'\{\{[^{}]*$', '', out)
+        if cleaned == out:
+            break
+        out = cleaned
+    out = out.replace('}}', '')
+    return out
+
 def normalize_furigana(s: Optional[str]) -> Optional[str]:
     if s is None:
         return None
@@ -29,8 +48,8 @@ def strip_markup(s: Optional[str]) -> Optional[str]:
         pass
     # remove ref blocks and simple <br/>
     s = TAG_RE.sub('', s)
-    # remove templates like {{...}} (non-greedy)
-    s = re.sub(r'\{\{.*?\}\}', '', s, flags=re.S)
+    # remove templates like {{...}}, including nested forms
+    s = strip_templates(s) or ""
     # unwrap wikilinks [[A|B]] -> B
     s = LINK_RE.sub(r'\\1', s)
     # remove any remaining HTML tags
