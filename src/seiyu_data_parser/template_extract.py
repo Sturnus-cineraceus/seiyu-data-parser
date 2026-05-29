@@ -51,7 +51,7 @@ def strip_markup(s: Optional[str]) -> Optional[str]:
     # remove templates like {{...}}, including nested forms
     s = strip_templates(s) or ""
     # unwrap wikilinks [[A|B]] -> B
-    s = LINK_RE.sub(r'\\1', s)
+    s = LINK_RE.sub(r'\1', s)
     # remove any remaining HTML tags
     s = re.sub(r'<[^>]+>', '', s)
     # remove stray angle brackets and isolated 'ref' tokens

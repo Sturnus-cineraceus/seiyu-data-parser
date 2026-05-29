@@ -8,6 +8,18 @@ TARGET_CATEGORIES = [
     "日本の女性声優",
 ]
 
+
+def _build_section_header_re(section_name: str) -> re.Pattern:
+    """
+    Build a section-header regex for target names.
+    """
+    names = [section_name]
+    if section_name == "出演":
+        # Some pages use a more specific header for voice-actor credits.
+        names.extend(["出演（声優）", "出演(声優)"])
+    name_pattern = "|".join(re.escape(n) for n in dict.fromkeys(names))
+    return re.compile(r'(?m)^(?P<underline>={2,})\s*(?:' + name_pattern + r')\s*(?P=underline)\s*$')
+
 def extract_title_and_categories(page_xml: str) -> Tuple[str, List[str], str]:
     """
     Robustly parse a <page> XML string and return (title, [matched category names], text).
@@ -55,7 +67,7 @@ def extract_section(page_xml: str, section_name: str = "出演") -> Tuple[str, i
     if not text:
         return "", 0
     # Find the section header at any level (>=2). Capture its level (number of '=').
-    header_re = re.compile(r'(?m)^(?P<underline>={2,})\s*' + re.escape(section_name) + r'\s*(?P=underline)\s*$')
+    header_re = _build_section_header_re(section_name)
     m = header_re.search(text)
     if not m:
         return "", 0
@@ -174,7 +186,9 @@ def parse_voice_template(page_input: str) -> Optional[Dict[str, Any]]:
         s = s or ""
         m = re.search(r'\[\[([^|\]]+)(?:\|([^]]+))?\]\]', s)
         if m:
-            return template_extract.strip_markup(m.group(1)) or ""
+            # prefer displayed label when present
+            label_or_name = m.group(2) if m.group(2) else m.group(1)
+            return template_extract.strip_markup(label_or_name) or ""
         return template_extract.strip_markup(s) or ""
 
     # build result starting from candidate if any
@@ -275,7 +289,7 @@ def parse_appearances(page_input: str, section_name: str = "出演") -> List[Dic
         return []
 
     # reuse existing section extraction logic but on raw text
-    header_re = re.compile(r'(?m)^(?P<underline>={2,})\s*' + re.escape(section_name) + r'\s*(?P=underline)\s*$')
+    header_re = _build_section_header_re(section_name)
     m = header_re.search(text)
     if not m:
         return []

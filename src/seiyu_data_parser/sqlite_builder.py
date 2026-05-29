@@ -59,6 +59,17 @@ def _hash_canonical_name(canonical_name: str) -> Optional[str]:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
+def _hash_work_key(canonical_name: str, media: str) -> Optional[str]:
+    """Generate a short, URL-safe hash for a work key (canonical_name + media)."""
+    canonical_name = _normalize_text(canonical_name)
+    media = _normalize_text(media)
+    if not canonical_name or not media:
+        return None
+    key = f"{canonical_name}\n{media}"
+    digest = hashlib.blake2b(key.encode("utf-8"), digest_size=12).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
 def _normalize_year(value: Any) -> Optional[int]:
     if isinstance(value, int):
         return value
@@ -163,8 +174,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             title TEXT NOT NULL,
             canonical_name TEXT NOT NULL,
             canonical_name_hash TEXT,
-            -- canonical_name is the primary identifier for works in the new schema
-            UNIQUE(canonical_name),
+            -- A work is identified by canonical_name + media so the same title
+            -- can exist in multiple media without being merged.
+            UNIQUE(canonical_name, media),
             UNIQUE(canonical_name_hash)
         );
 
@@ -346,7 +358,7 @@ def _upsert_work(conn: sqlite3.Connection, media: str, title: str, wiki_title: s
     if not title or not canonical_name:
         raise ValueError("work title and canonical_name are required")
 
-    canonical_name_hash = _hash_canonical_name(canonical_name)
+    canonical_name_hash = _hash_work_key(canonical_name, media)
 
     # Insert-or-ignore by canonical_name
     conn.execute(
@@ -359,11 +371,15 @@ def _upsert_work(conn: sqlite3.Connection, media: str, title: str, wiki_title: s
         UPDATE works
            SET media = COALESCE(NULLIF(media, ''), ?),
                title = COALESCE(NULLIF(title, ''), ?)
-         WHERE canonical_name = ?
+         WHERE canonical_name = ? AND media = ?
         """,
-        (media, title, canonical_name),
+        (media, title, canonical_name, media),
     )
-    return _get_id(conn, "SELECT id FROM works WHERE canonical_name = ?", (canonical_name,))
+    return _get_id(
+        conn,
+        "SELECT id FROM works WHERE canonical_name = ? AND media = ?",
+        (canonical_name, media),
+    )
 
 
 def _iter_credits(works: Any) -> Iterable[Dict[str, Any]]:
