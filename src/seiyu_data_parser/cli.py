@@ -4,6 +4,7 @@ import os
 import sys
 import re
 import html
+from urllib.parse import quote
 from typing import Any, Dict, List
 from .io import open_bz2
 from .wikistream import iter_pages
@@ -59,6 +60,13 @@ def _strip_parenthetical(title: str) -> str:
     title = re.sub(r'\s*（.*?）', '', title)
     return title.strip()
 
+def _build_wikipedia_source_url(title: str) -> str:
+    if not isinstance(title, str):
+        title = ""
+    normalized_title = title.replace(" ", "_")
+    encoded_title = quote(normalized_title, safe="_")
+    return f"https://ja.wikipedia.org/wiki/{encoded_title}"
+
 def _gender_from_categories(categories: List[str]) -> str | None:
     has_male = "日本の男性声優" in categories
     has_female = "日本の女性声優" in categories
@@ -111,6 +119,7 @@ def main():
                     result_item: Dict[str, Any] = {
                         "name": _strip_parenthetical(title),
                         "canonical_name": title,
+                        "wikipedia_source_url": _build_wikipedia_source_url(title),
                     }
                     if gender:
                         result_item["gender"] = gender
