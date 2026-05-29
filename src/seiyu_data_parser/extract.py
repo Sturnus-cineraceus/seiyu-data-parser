@@ -435,6 +435,40 @@ def _parse_item_line(line: str):
     # remove trailing note markers like "※田中雪弥名義"
     line = re.sub(r'\s*※.*$', '', line).strip()
 
+    def _strip_aggregate_suffix(s: str) -> str:
+        # Drop trailing aggregate notes like "- 3シリーズ" or
+        # "- 1シリーズ + 特別編2作品" while keeping ordinary titles intact.
+        unit = r'(?:\d+\s*(?:シリーズ|作品|部作)|特別編\s*\d*\s*作品?|特別編|特別版\s*\d*\s*作品?|特別版)'
+        delim_matches = list(re.finditer(r'\s[-–—]\s*', s))
+        if not delim_matches:
+            return s
+        m = delim_matches[-1]
+        tail = (s[m.end():] or '').strip()
+        if re.fullmatch(rf'{unit}(?:\s*[\+＋]\s*{unit})*', tail):
+            return s[:m.start()].rstrip()
+        return s
+
+    def _strip_informational_suffix(s: str) -> str:
+        # Drop non-role tail notes such as broadcast/distribution remarks.
+        # Keep role-like tails (e.g. "- ヤスオ" or "- 主演・A 役") for fallback parsing.
+        delim_matches = list(re.finditer(r'\s[-–—]\s*', s))
+        if not delim_matches:
+            return s
+        m = delim_matches[-1]
+        tail = (s[m.end():] or '').strip()
+        if not tail:
+            return s
+        if re.search(r'\b役\b|[\s　]役$', tail):
+            return s
+        if re.fullmatch(r'[\wぁ-んァ-ヶ一-龠・ー]{1,20}', tail):
+            return s
+        if re.search(r'TV|テレビ|放送|再編集|未放送|BD|DVD|配信|第\d+巻|特別編|特別版', tail):
+            return s[:m.start()].rstrip()
+        return s
+
+    line = _strip_aggregate_suffix(line)
+    line = _strip_informational_suffix(line)
+
     def _looks_like_year_or_date_segment(s: str) -> bool:
         s = re.sub(r'\s+', '', s or '')
         if not s:
@@ -442,6 +476,7 @@ def _parse_item_line(line: str):
         return bool(
             re.fullmatch(r'\d{4}(?:年)?', s)
             or re.fullmatch(r'\d{4}(?:年)?[-–—~〜]\d{4}(?:年)?', s)
+            or re.fullmatch(r'\d{4}(?:年)?[-–—~〜]', s)
             or re.fullmatch(r'\d{1,2}月(?:\d{1,2}日)?', s)
             or re.fullmatch(r'\d{1,2}日', s)
         )
@@ -518,6 +553,8 @@ def _parse_item_line(line: str):
             subparts = re.split(r'[\/\s]+', p_clean)
             for sp in subparts:
                 sp = sp.strip()
+                if re.fullmatch(r'[-–—~〜]+', sp):
+                    continue
                 if sp:
                     roles.append(sp)
     # final cleanup of role entries
@@ -544,19 +581,20 @@ def _parse_item_line(line: str):
         title = title[:m_role_suffix.start()].strip()
     else:
         # フォールバック: 行末のハイフン区切りで役名のみが付くケース（例: "作品 - ヤスオ"）
-        m_role_fallback = re.search(r'\s[-–—]\s*(.+?)\s*$', title)
-        if m_role_fallback:
-            role_text = m_role_fallback.group(1).strip()
-            # Avoid capturing cases where the suffix contains year-like or channel info (digits or 年)
-            if not re.search(r'\d|年', role_text):
-                new_roles = []
-                for sp in re.split(r'[、,，/／]+', role_text):
-                    sp = sp.strip().strip(' \t\n\r\'"')
-                    if sp:
-                        new_roles.append(sp)
-                if new_roles:
-                    roles = new_roles
-                    title = title[:m_role_fallback.start()].strip()
+        if not roles:
+            m_role_fallback = re.search(r'\s[-–—]\s*(.+?)\s*$', title)
+            if m_role_fallback:
+                role_text = m_role_fallback.group(1).strip()
+                # Avoid capturing cases where the suffix contains year-like or channel info (digits or 年)
+                if not re.search(r'\d|年', role_text):
+                    new_roles = []
+                    for sp in re.split(r'[、,，/／]+', role_text):
+                        sp = sp.strip().strip(' \t\n\r\'"')
+                        if sp:
+                            new_roles.append(sp)
+                    if new_roles:
+                        roles = new_roles
+                        title = title[:m_role_fallback.start()].strip()
 
     # 役名候補の正規化: 先頭の「主演・」表記があれば除去（助演は対象外）
     normalized = []
@@ -629,7 +667,18 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             unwrapped, _ = _extract_unwrapped_and_link(cleaned)
             if not unwrapped:
                 continue
-            title, roles = _parse_item_line(unwrapped)
+            # If the list item is a single wikilink only, parentheses in the label
+            # are title-side qualifiers (e.g. "作品名（第2作）"), not cast roles.
+            is_single_link_item = bool(re.fullmatch(r'\s*\[\[[^\]]+\]\]\s*', cleaned or ''))
+            if is_single_link_item:
+                title, roles = unwrapped.strip(), []
+                m_title_qual = re.search(r'[（(]\s*([^()（）]+?)\s*[)）]\s*$', title)
+                if m_title_qual:
+                    qual = m_title_qual.group(1).strip()
+                    if re.fullmatch(r'(?:第\d+\s*(?:作|期|部|章|シリーズ)|(?:テレビ|TV)?アニメ第\d+シリーズ)', qual):
+                        title = title[:m_title_qual.start()].rstrip()
+            else:
+                title, roles = _parse_item_line(unwrapped)
             title = title.strip(" \t\n\r'\"")
             title = re.sub(r"'{2,}", '', title).strip()
             if not title:

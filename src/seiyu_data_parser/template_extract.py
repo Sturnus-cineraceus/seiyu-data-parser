@@ -50,6 +50,10 @@ def strip_markup(s: Optional[str]) -> Optional[str]:
     s = TAG_RE.sub('', s)
     # remove templates like {{...}}, including nested forms
     s = strip_templates(s) or ""
+    # unwrap external links [https://example.com Label] -> Label
+    s = re.sub(r'\[(https?://[^\s\]]+)\s+([^\]]+)\]', r'\2', s)
+    # unwrap bare external links [https://example.com] -> https://example.com
+    s = re.sub(r'\[(https?://[^\s\]]+)\]', r'\1', s)
     # unwrap wikilinks [[A|B]] -> B
     s = LINK_RE.sub(r'\1', s)
     # remove any remaining HTML tags
