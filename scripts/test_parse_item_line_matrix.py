@@ -88,6 +88,12 @@ TARGET_CASES = [
         'expected_roles': ['シャア・アズナブル', 'エドワウ・マス'],
     },
     {
+        'name': 'ova line with no-space hyphen suffix keeps role',
+        'line': 'To LOVEる -とらぶる- OVA（2009年 - 2010年、古手川唯）- コミックス第13巻 - 第18巻限定版',
+        'expected_title': 'To LOVEる -とらぶる- OVA',
+        'expected_roles': ['古手川唯'],
+    },
+    {
         'name': 'single wikilink label parentheses are not roles',
         'mode': 'works_section',
         'section_text': '=== アニメ ===\n* [[ゲゲゲの鬼太郎 (テレビアニメ第2シリーズ)|ゲゲゲの鬼太郎（第2作）]]\n',

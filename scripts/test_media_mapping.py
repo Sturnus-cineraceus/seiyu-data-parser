@@ -1,3 +1,7 @@
+import sys
+
+sys.path.insert(0, 'src')
+
 from seiyu_data_parser import media
 
 tests = [

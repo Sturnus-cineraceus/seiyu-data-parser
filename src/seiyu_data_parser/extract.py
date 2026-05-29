@@ -434,12 +434,13 @@ def _parse_item_line(line: str):
     line = line.strip()
     # remove trailing note markers like "※田中雪弥名義"
     line = re.sub(r'\s*※.*$', '', line).strip()
+    suffix_delim_re = re.compile(r'(?:(?<=\s)|(?<=[\)）]))[-–—]\s*')
 
     def _strip_aggregate_suffix(s: str) -> str:
         # Drop trailing aggregate notes like "- 3シリーズ" or
         # "- 1シリーズ + 特別編2作品" while keeping ordinary titles intact.
         unit = r'(?:\d+\s*(?:シリーズ|作品|部作)|特別編\s*\d*\s*作品?|特別編|特別版\s*\d*\s*作品?|特別版)'
-        delim_matches = list(re.finditer(r'\s[-–—]\s*', s))
+        delim_matches = list(suffix_delim_re.finditer(s))
         if not delim_matches:
             return s
         m = delim_matches[-1]
@@ -451,20 +452,23 @@ def _parse_item_line(line: str):
     def _strip_informational_suffix(s: str) -> str:
         # Drop non-role tail notes such as broadcast/distribution remarks.
         # Keep role-like tails (e.g. "- ヤスオ" or "- 主演・A 役") for fallback parsing.
-        delim_matches = list(re.finditer(r'\s[-–—]\s*', s))
-        if not delim_matches:
-            return s
-        m = delim_matches[-1]
-        tail = (s[m.end():] or '').strip()
-        if not tail:
-            return s
-        if re.search(r'\b役\b|[\s　]役$', tail):
-            return s
-        if re.fullmatch(r'[\wぁ-んァ-ヶ一-龠・ー]{1,20}', tail):
-            return s
-        if re.search(r'TV|テレビ|放送|再編集|未放送|BD|DVD|配信|第\d+巻|特別編|特別版', tail):
-            return s[:m.start()].rstrip()
-        return s
+        out = s
+        while True:
+            delim_matches = list(suffix_delim_re.finditer(out))
+            if not delim_matches:
+                return out
+            m = delim_matches[-1]
+            tail = (out[m.end():] or '').strip()
+            if not tail:
+                return out
+            if re.search(r'\b役\b|[\s　]役$', tail):
+                return out
+            if re.search(r'TV|テレビ|放送|再編集|未放送|BD|DVD|配信|第\d+巻|特別編|特別版|コミックス', tail):
+                out = out[:m.start()].rstrip()
+                continue
+            if re.fullmatch(r'[\wぁ-んァ-ヶ一-龠・ー]{1,20}', tail):
+                return out
+            return out
 
     line = _strip_aggregate_suffix(line)
     line = _strip_informational_suffix(line)
@@ -565,7 +569,7 @@ def _parse_item_line(line: str):
     #        括弧内の注記ではなく外側の役表記を優先して抽出する。
     #        「役」の直後は行末・空白・区切り記号のみ許容し、'役人' 等を誤検出しない。
     m_role_suffix = re.search(
-        r'\s[-–—]\s*(.+?)\s+役(?=\s|$|[、,，/／\)\]\}\.\,\:\;\!\?])\s*$',
+        r'(?:(?<=\s)|(?<=[\)）]))[-–—]\s*(.+?)\s+役(?=\s|$|[、,，/／\)\]\}\.\,\:\;\!\?])\s*$',
         title
     )
     if m_role_suffix:
@@ -582,7 +586,7 @@ def _parse_item_line(line: str):
     else:
         # フォールバック: 行末のハイフン区切りで役名のみが付くケース（例: "作品 - ヤスオ"）
         if not roles:
-            m_role_fallback = re.search(r'\s[-–—]\s*(.+?)\s*$', title)
+            m_role_fallback = re.search(r'(?:(?<=\s)|(?<=[\)）]))[-–—]\s*(.+?)\s*$', title)
             if m_role_fallback:
                 role_text = m_role_fallback.group(1).strip()
                 # Avoid capturing cases where the suffix contains year-like or channel info (digits or 年)

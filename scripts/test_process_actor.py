@@ -1,10 +1,21 @@
-import sys, json
+import json
+import os
+import sys
+
 sys.path.insert(0, 'src')
 from seiyu_data_parser.extract import extract_section, parse_works_section
 from seiyu_data_parser.media import process_actor
 
-with open('data/test.txt', 'r', encoding='utf-8') as f:
-    s = f.read()
+fixture_path = os.path.join('data', 'test.txt')
+if os.path.exists(fixture_path):
+    with open(fixture_path, 'r', encoding='utf-8') as f:
+        s = f.read()
+else:
+    s = '''
+== 出演 ==
+=== テレビアニメ ===
+* [[To LOVEる -とらぶる- OVA]]（2009年 - 2010年、古手川唯）- コミックス第13巻 - 第18巻限定版
+'''
 
 page_xml = f"<page><text><![CDATA[{s}]]></text></page>"
 body, level = extract_section(page_xml, '出演')
