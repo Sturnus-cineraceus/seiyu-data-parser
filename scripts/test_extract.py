@@ -1,7 +1,17 @@
 import sys
 from pprint import pprint
 sys.path.insert(0, 'src')
-from seiyu_data_parser.extract import parse_works_section
+from seiyu_data_parser.extract import extract_section, parse_works_section
+
+section_sample = '''== 出演作品 ==
+* [[Sample Work]]（役名）
+
+== 次の節 ==
+'''
+
+body, level = extract_section(f'<page><text>{section_sample}</text></page>', '出演')
+assert 'Sample Work' in body
+assert level == 2
 
 sample = '''=== 特撮 ===
 * [[仮面ライダー剣]]（2004年、ラウザー音声）
