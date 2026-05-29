@@ -72,7 +72,7 @@ def parse_voice_template(page_input: str) -> Optional[Dict[str, Any]]:
     """
     Accept either a page XML string or raw wiki markup text.
     If an XML <page> is provided, extract the text element; otherwise treat input as raw text.
-    Returns a dict with template fields (may include inferred birth_date/agency/official_site) or None.
+    Returns a dict with template fields (may include inferred birth_date/death_date/agency/official_site) or None.
     """
     # extract raw wikitext
     text = ""
@@ -209,6 +209,22 @@ def parse_voice_template(page_input: str) -> Optional[Dict[str, Any]]:
                     if parts:
                         result["birth_date"] = '-'.join(parts)
 
+    # death date: combine 没年/没月/没日 when all parts exist
+    if not result.get("death_date"):
+        y = raw_fields.get("没年")
+        mth = raw_fields.get("没月")
+        d = raw_fields.get("没日")
+        if y and mth and d:
+            try:
+                yv = int(re.sub(r'\D', '', y))
+                mv = int(re.sub(r'\D', '', mth))
+                dv = int(re.sub(r'\D', '', d))
+                result["death_date"] = f"{yv:04d}-{mv:02d}-{dv:02d}"
+            except Exception:
+                parts = [p for p in (y, mth, d) if p]
+                if len(parts) == 3:
+                    result["death_date"] = '-'.join(parts)
+
     # agency
     if not result.get("agency"):
         if raw_fields.get("事務所"):
@@ -230,6 +246,7 @@ def parse_voice_template(page_input: str) -> Optional[Dict[str, Any]]:
         if re.search(r'[=\|]|画像|ファイル', result["furigana"]):
             result.pop("furigana", None)
 
+    result = {k: v for k, v in result.items() if v is not None}
     return result if result else None
 
 

@@ -96,6 +96,8 @@ def main(argv: List[str] = None):
             "official_site": (tpl.get("official_site") if tpl and tpl.get("official_site") else None),
             "works": works
         }
+        if tpl and tpl.get("death_date"):
+            entry["death_date"] = tpl.get("death_date")
         entries.append(entry)
 
     # normalize all string fields to strip HTML comments/tags and <ref> markers

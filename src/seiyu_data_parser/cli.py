@@ -60,6 +60,17 @@ def _strip_parenthetical(title: str) -> str:
     title = re.sub(r'\s*（.*?）', '', title)
     return title.strip()
 
+def _gender_from_categories(categories: List[str]) -> str | None:
+    has_male = "日本の男性声優" in categories
+    has_female = "日本の女性声優" in categories
+    if has_male and has_female:
+        return "unknown"
+    if has_male:
+        return "male"
+    if has_female:
+        return "female"
+    return None
+
 def parse_args():
     parser = argparse.ArgumentParser(description="seiyu data parser")
     parser.add_argument("path", help="Path to .bz2 file (Wikipedia multistream dump)")
@@ -97,12 +108,15 @@ def main():
                     # parse template and appearances separately and combine simply
                     tpl = extract.parse_voice_template(page_xml)
                     works = extract.parse_appearances(page_xml, section_name="出演")
+                    gender = _gender_from_categories(cats)
                     result_item: Dict[str, Any] = {
                         "name": _strip_parenthetical(title),
                         "canonical_name": title,
                     }
+                    if gender:
+                        result_item["gender"] = gender
                     if tpl:
-                        for k in ("furigana", "birth_date", "agency", "official_site"):
+                        for k in ("furigana", "birth_date", "death_date", "agency", "official_site"):
                             if tpl.get(k):
                                 result_item[k] = tpl.get(k)
                     if works:

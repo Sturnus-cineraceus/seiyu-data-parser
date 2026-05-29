@@ -56,6 +56,20 @@ def parse_birth(fields: Dict[str, str]) -> Optional[str]:
     except Exception:
         return None
 
+def parse_death(fields: Dict[str, str]) -> Optional[str]:
+    year = fields.get('没年') or fields.get('没年 ')
+    month = fields.get('没月') or fields.get('没月 ')
+    day = fields.get('没日') or fields.get('没日 ')
+    if not year or not month or not day:
+        return None
+    try:
+        y = int(re.sub(r'\D', '', str(year)))
+        m = int(re.sub(r'\D', '', str(month)))
+        d = int(re.sub(r'\D', '', str(day)))
+        return f"{y:04d}-{m:02d}-{d:02d}"
+    except Exception:
+        return None
+
 def extract_templates(text: str) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     for m in TEMPLATE_RE.finditer(text):
@@ -75,16 +89,19 @@ def extract_voice_actor_dicts(text: str) -> List[Dict[str, Any]]:
         name = strip_markup(t.get('名前'))
         furigana = normalize_furigana(t.get('ふりがな'))
         birth = parse_birth(t)
+        death = parse_death(t)
         agency = strip_markup(t.get('事務所'))
         site = t.get('公式サイト')
         if site:
             m = URL_BRACKET_RE.search(site)
             site = m.group(1) if m else site.strip()
-        out.append({
+        actor = {
             'name': name,
             'furigana': furigana,
             'birth_date': birth,
+            'death_date': death,
             'agency': agency,
             'official_site': site
-        })
+        }
+        out.append({k: v for k, v in actor.items() if v is not None})
     return out
