@@ -447,6 +447,11 @@ def _parse_item_line(line: str):
         tail = (s[m.end():] or '').strip()
         if re.fullmatch(rf'{unit}(?:\s*[\+＋]\s*{unit})*', tail):
             return s[:m.start()].rstrip()
+        # Also strip aggregate count tails that are followed by note text,
+        # e.g. "- 5シリーズ / 2015年に総集編...劇場上映".
+        if re.match(rf'^{unit}(?:\s*[\+＋]\s*{unit})*\s*[\/／]\s*.+$', tail):
+            if re.search(r'\d{4}年|テレビ|TV|放送|上映|公開|総集編|再編集|劇場', tail):
+                return s[:m.start()].rstrip()
         return s
 
     def _strip_informational_suffix(s: str) -> str:

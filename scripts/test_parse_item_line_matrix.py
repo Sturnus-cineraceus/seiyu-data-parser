@@ -100,6 +100,13 @@ TARGET_CASES = [
         'expected_title': 'ゲゲゲの鬼太郎',
         'expected_roles': [],
     },
+    {
+        'name': 'haikyu aggregate and theatrical note keeps cast role',
+        'mode': 'works_section',
+        'section_text': "=== テレビアニメ ===\n* [[ハイキュー!!]]（2014年 - 2020年、'''清水潔子'''<ref>{{Cite web|和書|work=アニメ『ハイキュー!!』|title=STAFF&CAST|url=http://www.j-haikyu.com/anime/staff.html|accessdate=2019-09-22|archiveurl=https://web.archive.org/web/20141224050312/http://www.j-haikyu.com/anime/staff.html|archivedate=2014-12-24}}</ref><ref>{{Cite web|和書|work=アニメ『ハイキュー!! 烏野高校 VS 白鳥沢学園高校』|title=STAFF&CAST スタッフ&キャスト|url=http://www.j-haikyu.com/anime/staff.html|accessdate=2019-09-22}}</ref><ref>{{Cite web|和書|url=https://haikyu.jp/staffcast/|title=STAFF & CAST|work=アニメ『ハイキュー!!』公式サイト|accessdate=2019-09-22}}</ref>） - 5シリーズ{{Ras|第1期（2014年）、第2期『セカンドシーズン』（2015年 - 2016年）、第3期『烏野高校 VS 白鳥沢学園高校』（2016年）、第4期『TO THE TOP』第1クール（2020年）、第4期『TO THE TOP』第2クール（2020年）}} / 2015年に総集編『終わりと始まり』劇場上映\n",
+        'expected_title': 'ハイキュー!!',
+        'expected_roles': ['清水潔子'],
+    },
 ]
 
 
