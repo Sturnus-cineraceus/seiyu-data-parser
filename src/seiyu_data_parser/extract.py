@@ -491,9 +491,17 @@ def _parse_item_line(line: str):
                 out = out[:m.start()].rstrip()
                 continue
             if re.fullmatch(r'[\wぁ-んァ-ヶ一-龠・ー]{1,20}', tail):
-                if re.search(r'[（(][^()（）]*\d{4}[^()（）]*[)）]', out):
-                    out = out[:m.start()].rstrip()
-                    continue
+                year_paren = re.search(r'[（(][^()（）]*\d{4}[^()（）]*[)）]', out)
+                if year_paren:
+                    # 括弧内に年以外のコンテンツ（役名・局名等）があれば役は括弧内に取得済みと判断し、
+                    # 外側の短い語を情報注記として除去する。
+                    # 括弧内が年・日付だけの場合は除去しない（外側が役名の可能性がある）。
+                    inner = year_paren.group(0)[1:-1]
+                    inner_clean = re.sub(r'\d+', '', inner)
+                    inner_clean = re.sub(r'[年月日、,，\s\-–—~〜]+', '', inner_clean).strip()
+                    if inner_clean:
+                        out = out[:m.start()].rstrip()
+                        continue
                 return out
             return out
 

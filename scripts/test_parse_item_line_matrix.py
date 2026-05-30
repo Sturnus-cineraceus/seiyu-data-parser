@@ -146,6 +146,14 @@ TARGET_CASES = [
         'expected_roles': ['女性ライター', 'レミの母'],
         'expected_year': 1998,
     },
+        {
+            'name': 'single role outside year-only parentheses',
+            'mode': 'works_section',
+            'section_text': '=== 映画 ===\n* [[名探偵コナン 沈黙の15分]]（2011年） - 朝倉優一郎\n',
+            'expected_title': '名探偵コナン 沈黙の15分',
+            'expected_roles': ['朝倉優一郎'],
+            'expected_year': 2011,
+        },
     {
         'name': 'year range in parentheses with outside roles uses earliest year',
         'mode': 'works_section',
