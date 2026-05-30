@@ -672,6 +672,22 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             t = (t[:m.start()] + t[m.end():]).strip()
             return t, y
 
+        def _extract_inline_year_from_item_text(text: str):
+            """Extract year/year-range from trailing parenthesized item text (e.g. "（1992年、ローザ）")."""
+            t = (text or '').strip()
+            m = re.search(
+                r'\s*[（(]\s*(\d{4})\s*(?:年)?\s*(?:[-–—~〜]\s*(\d{4})\s*(?:年)?)?\s*(?:[、,，][^()（）]*)?\s*[)）]\s*(?:[-–—].*)?$',
+                t,
+            )
+            if not m:
+                return None
+            try:
+                y1 = int(m.group(1))
+                y2 = int(m.group(2)) if m.group(2) else None
+                return min(y1, y2) if y2 is not None else y1
+            except Exception:
+                return None
+
         for line in text_block.splitlines():
             # detect table-style year rows
             m_year = table_year_re.match(line.strip())
@@ -714,6 +730,10 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             else:
                 title, roles = _parse_item_line(unwrapped)
 
+            # Keep a fallback year from the original item text for cases where
+            # _parse_item_line consumes parenthesized year+role segments.
+            item_inline_year = _extract_inline_year_from_item_text(unwrapped)
+
             # Remove trailing year parenthesis from title, and use it as year only
             # when no year heading/table marker is already active.
             title, inline_year = _extract_inline_year_from_title(title)
@@ -746,6 +766,8 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
                 year_val = current_year
             elif inline_year is not None:
                 year_val = inline_year
+            elif item_inline_year is not None:
+                year_val = item_inline_year
             else:
                 year_val = ""
             # strip remaining markup from title, canonical_name and roles

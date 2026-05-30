@@ -123,6 +123,14 @@ TARGET_CASES = [
         'expected_roles': ['岡崎澄江', '俊也の母'],
         'expected_year': 1998,
     },
+    {
+        'name': 'inline year and role in same parentheses without year heading',
+        'mode': 'works_section',
+        'section_text': '=== テレビアニメ ===\n* [[風の中の少女 金髪のジェニー]]（1992年、ローザ）\n',
+        'expected_title': '風の中の少女 金髪のジェニー',
+        'expected_roles': ['ローザ'],
+        'expected_year': 1992,
+    },
 ]
 
 
