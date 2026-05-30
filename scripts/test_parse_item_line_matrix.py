@@ -131,6 +131,14 @@ TARGET_CASES = [
         'expected_roles': ['ローザ'],
         'expected_year': 1992,
     },
+    {
+        'name': 'monogatari year range and role in parentheses with series suffix note',
+        'mode': 'works_section',
+        'section_text': "=== テレビアニメ ===\n* [[物語シリーズ]]（2012年 - 2014年{{ep|2|s=花物語}}<!-- 2014-08-16 -->、'''貝木泥舟'''{{ep|3|s=偽物語}}） - シリーズ{{Ras|『[[偽物語]]』（2012年）<!-- 2012-01-21 #3 -->、『[[〈物語〉シリーズ セカンドシーズン]]』（2013年）<!-- 2013-11-23 #21 -->、『[[花物語 (西尾維新)|花物語]]』（2014年）<!-- 2014-08-16 #2 -->}}\n",
+        'expected_title': '物語シリーズ',
+        'expected_roles': ['貝木泥舟'],
+        'expected_year': 2012,
+    },
 ]
 
 

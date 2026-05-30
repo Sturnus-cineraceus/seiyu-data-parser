@@ -439,7 +439,7 @@ def _parse_item_line(line: str):
     def _strip_aggregate_suffix(s: str) -> str:
         # Drop trailing aggregate notes like "- 3シリーズ" or
         # "- 1シリーズ + 特別編2作品" while keeping ordinary titles intact.
-        unit = r'(?:\d+\s*(?:シリーズ|作品|部作)|特別編\s*\d*\s*作品?|特別編|特別版\s*\d*\s*作品?|特別版)'
+        unit = r'(?:\d+\s*(?:シリーズ|作品|部作)|(?:シリーズ|作品|部作)|特別編\s*\d*\s*作品?|特別編|特別版\s*\d*\s*作品?|特別版)'
         delim_matches = list(suffix_delim_re.finditer(s))
         if not delim_matches:
             return s
@@ -599,6 +599,9 @@ def _parse_item_line(line: str):
                     continue
                 # Avoid capturing cases where the suffix contains year-like or channel info (digits or 年)
                 if re.search(r'\d|年', role_text):
+                    continue
+                # Generic aggregate words are not cast roles.
+                if re.fullmatch(r'(?:シリーズ|作品|部作)', role_text):
                     continue
                 new_roles = []
                 for sp in re.split(r'[、,，/／]+', role_text):
