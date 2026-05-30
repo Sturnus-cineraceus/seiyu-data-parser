@@ -151,6 +151,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             agency_ngrams TEXT,
             -- Official website URL
             official_site TEXT,
+            -- Source Wikipedia page URL
+            wikipedia_source_url TEXT,
             -- Birth date stored in ISO YYYY-MM-DD (SQLite DATE affinity)
             birth_date DATE,
             -- Death date stored in ISO YYYY-MM-DD (SQLite DATE affinity)
@@ -278,6 +280,7 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     agency = _normalize_text(actor.get("agency"))
     agency_ngrams = _compute_bigrams(agency) if agency else None
     official_site = _normalize_text(actor.get("official_site"))
+    wikipedia_source_url = _normalize_text(actor.get("wikipedia_source_url"))
     birth_date = _normalize_date(actor.get("birth_date"))
     death_date = _normalize_date(actor.get("death_date"))
     gender = _normalize_text(actor.get("gender"))
@@ -285,7 +288,7 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
     if canonical_name:
         # Prefer inserting/looking up by canonical_name (it's unique when present).
         conn.execute(
-            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date, death_date, gender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO voice_actors(canonical_name, canonical_name_hash, name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, wikipedia_source_url, birth_date, death_date, gender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 canonical_name,
                 canonical_name_hash,
@@ -296,6 +299,7 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
                 agency,
                 agency_ngrams,
                 official_site,
+                wikipedia_source_url,
                 birth_date,
                 death_date,
                 gender,
@@ -312,6 +316,7 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
                    agency = COALESCE(NULLIF(agency, ''), ?),
                    agency_ngrams = COALESCE(NULLIF(agency_ngrams, ''), ?),
                    official_site = COALESCE(NULLIF(official_site, ''), ?),
+                 wikipedia_source_url = COALESCE(NULLIF(wikipedia_source_url, ''), ?),
                    birth_date = COALESCE(NULLIF(birth_date, ''), ?),
                    death_date = COALESCE(NULLIF(death_date, ''), ?),
                    gender = COALESCE(NULLIF(gender, ''), ?)
@@ -325,6 +330,7 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
                 agency,
                 agency_ngrams,
                 official_site,
+                wikipedia_source_url,
                 birth_date,
                 death_date,
                 gender,
@@ -336,8 +342,8 @@ def _upsert_voice_actor(conn: sqlite3.Connection, actor: Dict[str, Any]) -> int:
         # Legacy path: no canonical_name provided. Insert by name (non-unique
         # names are allowed) and return the first matching id.
         conn.execute(
-            "INSERT OR IGNORE INTO voice_actors(name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date, death_date, gender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, birth_date, death_date, gender),
+            "INSERT OR IGNORE INTO voice_actors(name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, wikipedia_source_url, birth_date, death_date, gender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (name, name_ngrams, furigana, furigana_ngrams, agency, agency_ngrams, official_site, wikipedia_source_url, birth_date, death_date, gender),
         )
         # Return one id that matches the name (order by id to be deterministic).
         return _get_id(conn, "SELECT id FROM voice_actors WHERE name = ? ORDER BY id LIMIT 1", (name,))
