@@ -40,6 +40,15 @@ STABLE_CASES = [
         'expected_roles': ['篠塚香織'],
     },
     {
+        'name': 'parenthesized role with trailing annotation suffix keeps canonical title',
+        'mode': 'works_section',
+        'section_text': '=== アニメ ===\n* この空の下で（2020年、[[田熊常吉]]） - [[タクマ (企業)|タクマ]]企業アニメーション<!-- 2020-10-19 -->\n',
+        'expected_title': 'この空の下で',
+        'expected_roles': ['田熊常吉'],
+        'expected_year': 2020,
+        'expected_canonical': 'この空の下で',
+    },
+    {
         'name': 'numeric role is retained',
         'line': '作品名（2001年、009）',
         'expected_title': '作品名',
@@ -55,6 +64,22 @@ TARGET_CASES = [
         'line': '激走戦隊カーレンジャー 第21話（1996年7月19日、テレビ朝日） - AAアバンバ（声） 役',
         'expected_title': '激走戦隊カーレンジャー',
         'expected_roles': ['AAアバンバ'],
+    },
+    {
+        'name': 'no year heading picks year from date and broadcaster parentheses',
+        'mode': 'works_section',
+        'section_text': '=== 特撮 ===\n* [[激走戦隊カーレンジャー]] 第21話（1996年7月19日、テレビ朝日） - AAアバンバ（声） 役\n',
+        'expected_title': '激走戦隊カーレンジャー',
+        'expected_roles': ['AAアバンバ'],
+        'expected_year': 1996,
+    },
+    {
+        'name': 'no year heading picks year from year and broadcaster parentheses',
+        'mode': 'works_section',
+        'section_text': '=== 特撮 ===\n* [[激走戦隊カーレンジャー]] 第21話（1996年、テレビ朝日） - AAアバンバ（声） 役\n',
+        'expected_title': '激走戦隊カーレンジャー',
+        'expected_roles': ['AAアバンバ'],
+        'expected_year': 1996,
     },
     {
         'name': 'external link label is parsed as title',
@@ -164,10 +189,12 @@ def _assert_case(case):
         title = parsed[0].get('title', '')
         roles = parsed[0].get('roles', [])
         year = parsed[0].get('year', '')
+        canonical_name = parsed[0].get('canonical_name', '')
         input_text = case['section_text']
     else:
         title, roles = _parse_item_line(case['line'])
         year = None
+        canonical_name = None
         input_text = case['line']
 
     assert title == case['expected_title'], (
@@ -189,6 +216,14 @@ def _assert_case(case):
             f"  input   : {input_text}\n"
             f"  expected: {case['expected_year']}\n"
             f"  actual  : {year}"
+        )
+
+    if 'expected_canonical' in case:
+        assert canonical_name == case['expected_canonical'], (
+            f"[{case['name']}] canonical_name mismatch\n"
+            f"  input   : {input_text}\n"
+            f"  expected: {case['expected_canonical']}\n"
+            f"  actual  : {canonical_name}"
         )
 
 

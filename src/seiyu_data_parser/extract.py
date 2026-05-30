@@ -475,6 +475,9 @@ def _parse_item_line(line: str):
                 out = out[:m.start()].rstrip()
                 continue
             if re.fullmatch(r'[\wぁ-んァ-ヶ一-龠・ー]{1,20}', tail):
+                if re.search(r'[（(][^()（）]*\d{4}[^()（）]*[)）]', out):
+                    out = out[:m.start()].rstrip()
+                    continue
                 return out
             return out
 
@@ -692,18 +695,36 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             return t, y
 
         def _extract_inline_year_from_item_text(text: str):
-            """Extract year/year-range from trailing parenthesized item text (e.g. "（1992年、ローザ）")."""
+            """Extract year/year-range from trailing parenthesized item text."""
             t = (text or '').strip()
             m = re.search(
                 r'\s*[（(]\s*(\d{4})\s*(?:年)?\s*(?:[-–—~〜]\s*(\d{4})\s*(?:年)?)?\s*(?:[、,，][^()（）]*)?\s*[)）]\s*(?:[-–—].*)?$',
                 t,
             )
-            if not m:
+            if m:
+                try:
+                    y1 = int(m.group(1))
+                    y2 = int(m.group(2)) if m.group(2) else None
+                    return min(y1, y2) if y2 is not None else y1
+                except Exception:
+                    return None
+
+            # Support detailed date forms such as:
+            # 「（1996年7月19日、テレビ朝日）」 or 「（1996年7月、テレビ朝日）」.
+            m_tail_par = re.search(r'\s*[（(]([^()（）]+)[)）]\s*(?:[-–—].*)?$', t)
+            if not m_tail_par:
                 return None
+            inner = (m_tail_par.group(1) or '').strip()
+            m_year = re.search(r'(\d{4})\s*年', inner)
+            if not m_year:
+                m_year = re.search(r'(^|[^\d])(\d{4})(?!\d)', inner)
+                if not m_year:
+                    return None
+                year_group = 2
+            else:
+                year_group = 1
             try:
-                y1 = int(m.group(1))
-                y2 = int(m.group(2)) if m.group(2) else None
-                return min(y1, y2) if y2 is not None else y1
+                return int(m_year.group(year_group))
             except Exception:
                 return None
 
@@ -765,7 +786,7 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
             # 1) If the media heading has a link and the item contains a link
             #    that matches the media link (by target or by label==media label), use it.
             # 2) If the media heading has a link, use that (block default).
-            # 3) Use the item's first link target.
+            # 3) Use a link that matches the parsed title.
             # 4) Fallback to the parsed title.
             chosen = ""
             if media_link and item_link_pairs:
@@ -775,8 +796,18 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
                         break
             if not chosen and media_link:
                 chosen = media_link
-            if not chosen and first_link_target:
-                chosen = first_link_target
+            if not chosen and item_link_pairs:
+                def _title_key(s: str) -> str:
+                    s = (s or '').strip()
+                    s = re.sub(r'\s*[（(][^()（）]*[)）]\s*$', '', s)
+                    s = re.sub(r'\s+', ' ', s).strip()
+                    return s
+
+                title_key = _title_key(title)
+                for target, label in item_link_pairs:
+                    if title_key and (_title_key(target) == title_key or _title_key(label) == title_key):
+                        chosen = target
+                        break
             if not chosen:
                 chosen = title
 
