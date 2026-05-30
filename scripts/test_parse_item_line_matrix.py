@@ -163,6 +163,14 @@ TARGET_CASES = [
         'expected_year': 1992,
     },
     {
+        'name': 'pop team epic year range and in-parenthesis role with broadcast note',
+        'mode': 'works_section',
+        'section_text': "=== テレビアニメ ===\n* [[ポプテピピック]]（2018年 - 2021年、'''ポプ子'''〈第8話Bパート / 再放送・リミックス版第6話Bパート〉<ref>{{Cite web|和書|work=TVアニメ「ポプテピピック」公式サイト|title=キャスト|url=http://hoshiiro.jp/cast/|accessdate=2019-05-02}}</ref>）<!-- 2018-02-25 -->\n",
+        'expected_title': 'ポプテピピック',
+        'expected_roles': ['ポプ子'],
+        'expected_year': 2018,
+    },
+    {
         'name': 'monogatari year range and role in parentheses with series suffix note',
         'mode': 'works_section',
         'section_text': "=== テレビアニメ ===\n* [[物語シリーズ]]（2012年 - 2014年{{ep|2|s=花物語}}<!-- 2014-08-16 -->、'''貝木泥舟'''{{ep|3|s=偽物語}}） - シリーズ{{Ras|『[[偽物語]]』（2012年）<!-- 2012-01-21 #3 -->、『[[〈物語〉シリーズ セカンドシーズン]]』（2013年）<!-- 2013-11-23 #21 -->、『[[花物語 (西尾維新)|花物語]]』（2014年）<!-- 2014-08-16 #2 -->}}\n",

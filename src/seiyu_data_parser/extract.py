@@ -436,6 +436,22 @@ def _parse_item_line(line: str):
     line = re.sub(r'\s*※.*$', '', line).strip()
     suffix_delim_re = re.compile(r'(?:(?<=\s)|(?<=[\)）]))[-–—]\s*')
 
+    def _top_level_suffix_delims(s: str):
+        """Return suffix-delimiter matches that are not inside ()/（） groups."""
+        matches = []
+        depth = 0
+        for m in suffix_delim_re.finditer(s):
+            seg = s[:m.start()]
+            depth = 0
+            for ch in seg:
+                if ch in '（(':
+                    depth += 1
+                elif ch in '）)' and depth > 0:
+                    depth -= 1
+            if depth == 0:
+                matches.append(m)
+        return matches
+
     def _strip_aggregate_suffix(s: str) -> str:
         # Drop trailing aggregate notes like "- 3シリーズ" or
         # "- 1シリーズ + 特別編2作品" while keeping ordinary titles intact.
@@ -443,7 +459,7 @@ def _parse_item_line(line: str):
         # Accept optional parenthesized qualifiers attached to each aggregate unit,
         # e.g. "1作品(OAD)+1シリーズ(ODS上映)".
         unit_with_note = rf'{unit}(?:\s*[（(][^()（）]{{1,40}}[)）])?'
-        delim_matches = list(suffix_delim_re.finditer(s))
+        delim_matches = _top_level_suffix_delims(s)
         if not delim_matches:
             return s
         m = delim_matches[-1]
@@ -462,7 +478,7 @@ def _parse_item_line(line: str):
         # Keep role-like tails (e.g. "- ヤスオ" or "- 主演・A 役") for fallback parsing.
         out = s
         while True:
-            delim_matches = list(suffix_delim_re.finditer(out))
+            delim_matches = _top_level_suffix_delims(out)
             if not delim_matches:
                 return out
             m = delim_matches[-1]
@@ -563,8 +579,9 @@ def _parse_item_line(line: str):
     #        年・期間等を示す文字列（数字・年・ハイフンなど）を除外して役名候補を収集する。
     if par:
         # First split by comma-like delimiters to separate year-info from role names.
-        # Preserve '・' (used inside names) by not splitting on it.
-        parts = re.split(r'[、,，/／]+', par)
+        # Preserve '・' (used inside names) and defer slash splitting until
+        # after angle-bracket annotations are removed.
+        parts = re.split(r'[、,，]+', par)
         for p in parts:
             p = p.strip()
             # Remove inline angle-bracket annotations (e.g. 〈第2話Aパート〉) before numeric checks
@@ -608,7 +625,7 @@ def _parse_item_line(line: str):
         # フォールバック: 行末のハイフン区切りで役名のみが付くケース（例: "作品 - ヤスオ"）
         if not roles:
             # Prefer the right-most delimiter so year ranges like "1998年 - 1999年" are not mistaken as role suffixes.
-            delim_matches = list(suffix_delim_re.finditer(title))
+            delim_matches = _top_level_suffix_delims(title)
             for m_role_fallback in reversed(delim_matches):
                 role_text = (title[m_role_fallback.end():] or '').strip()
                 if not role_text:
