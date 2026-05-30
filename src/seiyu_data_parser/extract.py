@@ -437,18 +437,26 @@ def _parse_item_line(line: str):
     suffix_delim_re = re.compile(r'(?:(?<=\s)|(?<=[\)）]))[-–—]\s*')
 
     def _top_level_suffix_delims(s: str):
-        """Return suffix-delimiter matches that are not inside ()/（） groups."""
+        """Return suffix-delimiter matches that are not inside parentheses or Japanese quotes."""
         matches = []
-        depth = 0
+
+        def _outside_group_and_quotes(prefix: str) -> bool:
+            paren_depth = 0
+            kagi_depth = 0
+            for ch in prefix:
+                if ch in '（(':
+                    paren_depth += 1
+                elif ch in '）)' and paren_depth > 0:
+                    paren_depth -= 1
+                elif ch in '「『【':
+                    kagi_depth += 1
+                elif ch in '」』】' and kagi_depth > 0:
+                    kagi_depth -= 1
+            return paren_depth == 0 and kagi_depth == 0
+
         for m in suffix_delim_re.finditer(s):
             seg = s[:m.start()]
-            depth = 0
-            for ch in seg:
-                if ch in '（(':
-                    depth += 1
-                elif ch in '）)' and depth > 0:
-                    depth -= 1
-            if depth == 0:
+            if _outside_group_and_quotes(seg):
                 matches.append(m)
         return matches
 
@@ -487,7 +495,10 @@ def _parse_item_line(line: str):
                 return out
             if re.search(r'\b役\b|[\s　]役$', tail):
                 return out
-            if re.search(r'TV|テレビ|放送|再編集|未放送|BD|DVD|配信|第\d+巻|特別編|特別版|コミックス', tail):
+            if tail.startswith(('『', '「', '【', '"', "'")):
+                out = out[:m.start()].rstrip()
+                continue
+            if re.search(r'TV|テレビ|放送|再編集|未放送|BD|DVD|配信|第\d+巻|特別編|特別版|コミックス|総集編|上映|公開', tail):
                 out = out[:m.start()].rstrip()
                 continue
             if re.fullmatch(r'[\wぁ-んァ-ヶ一-龠・ー]{1,20}', tail):

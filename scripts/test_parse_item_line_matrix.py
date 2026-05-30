@@ -119,6 +119,14 @@ TARGET_CASES = [
         'expected_roles': ['シャア・アズナブル', 'エドワウ・マス'],
     },
     {
+        'name': 'theatrical recap suffix is treated as annotation not title',
+        'mode': 'works_section',
+        'section_text': "=== テレビアニメ ===\n* [[アルドノア・ゼロ]]（ウォルフ・アリアーシュ） - 2025年に総集編『アルドノア・ゼロ（Re+）』劇場上映<ref>{{Citation|和書|title=アルドノア・ゼロ（Re+） パンフレット|date=2025-02-28|publisher=アニプレックス|page=26}}</ref>\n",
+        'expected_title': 'アルドノア・ゼロ',
+        'expected_canonical': 'アルドノア・ゼロ',
+        'expected_roles': ['ウォルフ・アリアーシュ'],
+    },
+    {
         'name': 'ova line with no-space hyphen suffix keeps role',
         'line': 'To LOVEる -とらぶる- OVA（2009年 - 2010年、古手川唯）- コミックス第13巻 - 第18巻限定版',
         'expected_title': 'To LOVEる -とらぶる- OVA',
@@ -193,6 +201,15 @@ TARGET_CASES = [
         'expected_title': 'コープスパーティー OVAシリーズ',
         'expected_roles': ['篠崎あゆみ'],
         'expected_year': 2012,
+    },
+    {
+        'name': 'corpse party ova quoted bonus note does not become role',
+        'mode': 'works_section',
+        'section_text': "=== OVA ===\n* [[コープスパーティー#OVA|コープスパーティー]]（2012年 - 2013年、'''中嶋直美'''<ref>{{Cite web|和書|publisher=コープスパーティー Tortured Souls -暴虐された魂の呪叫-|url=https://corpse.jp/?cont=5|title=キャラクター|accessdate=2013-03-02}}</ref>） - 『[[コープスパーティー -THE ANTHOLOGY- サチコの恋愛遊戯♥Hysteric Birthday 2U]]』数量限定版特典、『[[コープスパーティー Tortured Souls -暴虐された魂の呪叫-]]』\n",
+        'expected_title': 'コープスパーティー',
+        'expected_roles': ['中嶋直美'],
+        'expected_year': 2012,
+        'expected_canonical': 'コープスパーティー#OVA',
     },
 ]
 
