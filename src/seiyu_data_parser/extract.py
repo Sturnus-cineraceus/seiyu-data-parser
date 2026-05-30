@@ -440,16 +440,19 @@ def _parse_item_line(line: str):
         # Drop trailing aggregate notes like "- 3シリーズ" or
         # "- 1シリーズ + 特別編2作品" while keeping ordinary titles intact.
         unit = r'(?:\d+\s*(?:シリーズ|作品|部作)|(?:シリーズ|作品|部作)|特別編\s*\d*\s*作品?|特別編|特別版\s*\d*\s*作品?|特別版)'
+        # Accept optional parenthesized qualifiers attached to each aggregate unit,
+        # e.g. "1作品(OAD)+1シリーズ(ODS上映)".
+        unit_with_note = rf'{unit}(?:\s*[（(][^()（）]{{1,40}}[)）])?'
         delim_matches = list(suffix_delim_re.finditer(s))
         if not delim_matches:
             return s
         m = delim_matches[-1]
         tail = (s[m.end():] or '').strip()
-        if re.fullmatch(rf'{unit}(?:\s*[\+＋]\s*{unit})*', tail):
+        if re.fullmatch(rf'{unit_with_note}(?:\s*[\+＋]\s*{unit_with_note})*', tail):
             return s[:m.start()].rstrip()
         # Also strip aggregate count tails that are followed by note text,
         # e.g. "- 5シリーズ / 2015年に総集編...劇場上映".
-        if re.match(rf'^{unit}(?:\s*[\+＋]\s*{unit})*\s*[\/／]\s*.+$', tail):
+        if re.match(rf'^{unit_with_note}(?:\s*[\+＋]\s*{unit_with_note})*\s*[\/／]\s*.+$', tail):
             if re.search(r'\d{4}年|テレビ|TV|放送|上映|公開|総集編|再編集|劇場', tail):
                 return s[:m.start()].rstrip()
         return s
@@ -489,6 +492,16 @@ def _parse_item_line(line: str):
             or re.fullmatch(r'\d{1,2}月(?:\d{1,2}日)?', s)
             or re.fullmatch(r'\d{1,2}日', s)
         )
+
+    def _strip_episode_broadcast_suffix(s: str) -> str:
+        # Trim trailing episode+broadcast metadata from title text, e.g.
+        # "作品名 第21話（1996年7月19日、テレビ朝日）" -> "作品名".
+        # Require a known broadcaster in parentheses to avoid over-stripping.
+        broadcasters = r'(?:テレビ朝日|テレビ東京|フジテレビ|TBS|NHK|日本テレビ)'
+        pat = re.compile(
+            rf'\s*(?:第?\s*[0-9０-９]+\s*話)\s*[（(][^()（）]*{broadcasters}[^()（）]*[)）]\s*$'
+        )
+        return pat.sub('', s or '').strip()
 
     def _find_trailing_parenthesized_segment(s: str):
         s = (s or '').rstrip()
@@ -625,6 +638,9 @@ def _parse_item_line(line: str):
         if nr:
             normalized.append(nr)
     roles = normalized
+
+    # Remove episode/broadcast metadata that should not be part of the work title.
+    title = _strip_episode_broadcast_suffix(title)
 
     return title, roles
 

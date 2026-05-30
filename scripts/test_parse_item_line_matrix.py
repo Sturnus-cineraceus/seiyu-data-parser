@@ -51,6 +51,12 @@ STABLE_CASES = [
 # Target bug-fix cases: enable after implementing suffix trimming logic.
 TARGET_CASES = [
     {
+        'name': 'tokusatsu episode and broadcaster suffix is excluded from title',
+        'line': '激走戦隊カーレンジャー 第21話（1996年7月19日、テレビ朝日） - AAアバンバ（声） 役',
+        'expected_title': '激走戦隊カーレンジャー',
+        'expected_roles': ['AAアバンバ'],
+    },
+    {
         'name': 'external link label is parsed as title',
         'mode': 'works_section',
         'section_text': '=== ゲーム ===\n* [https://www.over-eclipse.com/ オーバーエクリプス]（ポラリス）\n',
@@ -137,6 +143,14 @@ TARGET_CASES = [
         'section_text': "=== テレビアニメ ===\n* [[物語シリーズ]]（2012年 - 2014年{{ep|2|s=花物語}}<!-- 2014-08-16 -->、'''貝木泥舟'''{{ep|3|s=偽物語}}） - シリーズ{{Ras|『[[偽物語]]』（2012年）<!-- 2012-01-21 #3 -->、『[[〈物語〉シリーズ セカンドシーズン]]』（2013年）<!-- 2013-11-23 #21 -->、『[[花物語 (西尾維新)|花物語]]』（2014年）<!-- 2014-08-16 #2 -->}}\n",
         'expected_title': '物語シリーズ',
         'expected_roles': ['貝木泥舟'],
+        'expected_year': 2012,
+    },
+    {
+        'name': 'corpse party ova aggregate note does not become role',
+        'mode': 'works_section',
+        'section_text': "=== OVA ===\n| 2012年 |\n* [[コープスパーティー#OVA|コープスパーティー OVAシリーズ]]（2012年 - 2013年、'''篠崎あゆみ'''<ref>{{Cite web|和書|publisher=コープスパーティー Tortured Souls -暴虐された魂の呪叫-|url=https://corpse.jp/?cont=5|title=キャラクター|accessdate=2013-03-02}}</ref>）- 1作品(OAD)+1シリーズ(ODS上映)\n",
+        'expected_title': 'コープスパーティー OVAシリーズ',
+        'expected_roles': ['篠崎あゆみ'],
         'expected_year': 2012,
     },
 ]
