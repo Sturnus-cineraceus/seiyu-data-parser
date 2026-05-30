@@ -591,19 +591,24 @@ def _parse_item_line(line: str):
     else:
         # フォールバック: 行末のハイフン区切りで役名のみが付くケース（例: "作品 - ヤスオ"）
         if not roles:
-            m_role_fallback = re.search(r'(?:(?<=\s)|(?<=[\)）]))[-–—]\s*(.+?)\s*$', title)
-            if m_role_fallback:
-                role_text = m_role_fallback.group(1).strip()
+            # Prefer the right-most delimiter so year ranges like "1998年 - 1999年" are not mistaken as role suffixes.
+            delim_matches = list(suffix_delim_re.finditer(title))
+            for m_role_fallback in reversed(delim_matches):
+                role_text = (title[m_role_fallback.end():] or '').strip()
+                if not role_text:
+                    continue
                 # Avoid capturing cases where the suffix contains year-like or channel info (digits or 年)
-                if not re.search(r'\d|年', role_text):
-                    new_roles = []
-                    for sp in re.split(r'[、,，/／]+', role_text):
-                        sp = sp.strip().strip(' \t\n\r\'"')
-                        if sp:
-                            new_roles.append(sp)
-                    if new_roles:
-                        roles = new_roles
-                        title = title[:m_role_fallback.start()].strip()
+                if re.search(r'\d|年', role_text):
+                    continue
+                new_roles = []
+                for sp in re.split(r'[、,，/／]+', role_text):
+                    sp = sp.strip().strip(' \t\n\r\'"')
+                    if sp:
+                        new_roles.append(sp)
+                if new_roles:
+                    roles = new_roles
+                    title = title[:m_role_fallback.start()].strip()
+                    break
 
     # 役名候補の正規化: 先頭の「主演・」表記があれば除去（助演は対象外）
     normalized = []
@@ -647,6 +652,26 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
 
     def _process_text_block(text_block: str, media_name: str, current_year: int | None):
         """Parse list-item lines in text_block and append to results using media_name and current_year."""
+        def _extract_inline_year_from_title(text: str):
+            """Extract trailing parenthesized year/year-range from title and return (stripped_title, year_or_none)."""
+            t = (text or '').strip()
+            # Accept both full-width and half-width parentheses at line tail.
+            m = re.search(
+                r'\s*[（(]\s*(\d{4})\s*(?:年)?\s*(?:[-–—~〜]\s*(\d{4})\s*(?:年)?)?\s*[)）]\s*$',
+                t,
+            )
+            if not m:
+                return t, None
+            y = None
+            try:
+                y1 = int(m.group(1))
+                y2 = int(m.group(2)) if m.group(2) else None
+                y = min(y1, y2) if y2 is not None else y1
+            except Exception:
+                y = None
+            t = (t[:m.start()] + t[m.end():]).strip()
+            return t, y
+
         for line in text_block.splitlines():
             # detect table-style year rows
             m_year = table_year_re.match(line.strip())
@@ -688,6 +713,10 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
                         title = title[:m_title_qual.start()].rstrip()
             else:
                 title, roles = _parse_item_line(unwrapped)
+
+            # Remove trailing year parenthesis from title, and use it as year only
+            # when no year heading/table marker is already active.
+            title, inline_year = _extract_inline_year_from_title(title)
             title = title.strip(" \t\n\r'\"")
             title = re.sub(r"'{2,}", '', title).strip()
             if not title:
@@ -713,7 +742,12 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
                 chosen = title
 
             wiki_title = chosen
-            year_val = current_year if current_year is not None else ""
+            if current_year is not None:
+                year_val = current_year
+            elif inline_year is not None:
+                year_val = inline_year
+            else:
+                year_val = ""
             # strip remaining markup from title, canonical_name and roles
             clean_title = template_extract.strip_markup(title) or ""
             clean_title = re.sub(r'[<>]', '', clean_title).strip()

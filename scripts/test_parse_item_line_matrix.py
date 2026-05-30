@@ -107,6 +107,22 @@ TARGET_CASES = [
         'expected_title': 'ハイキュー!!',
         'expected_roles': ['清水潔子'],
     },
+    {
+        'name': 'inline parenthesized year populates year and is removed from title',
+        'mode': 'works_section',
+        'section_text': '=== アニメ ===\n* [[デビルマンレディー]]（1998年） - 女性ライター、レミの母\n',
+        'expected_title': 'デビルマンレディー',
+        'expected_roles': ['女性ライター', 'レミの母'],
+        'expected_year': 1998,
+    },
+    {
+        'name': 'year range in parentheses with outside roles uses earliest year',
+        'mode': 'works_section',
+        'section_text': '=== テレビアニメ ===\n* [[名探偵コナン (アニメ)|名探偵コナン]]（1998年 - 1999年{{ep|129}}<!-- 1999-01-04 -->） - 岡崎澄江{{ep|118}}、俊也の母{{ep|129}}<!-- 1998-09-21 -->\n',
+        'expected_title': '名探偵コナン',
+        'expected_roles': ['岡崎澄江', '俊也の母'],
+        'expected_year': 1998,
+    },
 ]
 
 
@@ -117,9 +133,11 @@ def _assert_case(case):
         assert parsed, f"[{case['name']}] no parsed result"
         title = parsed[0].get('title', '')
         roles = parsed[0].get('roles', [])
+        year = parsed[0].get('year', '')
         input_text = case['section_text']
     else:
         title, roles = _parse_item_line(case['line'])
+        year = None
         input_text = case['line']
 
     assert title == case['expected_title'], (
@@ -134,6 +152,14 @@ def _assert_case(case):
         f"  expected: {case['expected_roles']}\n"
         f"  actual  : {roles}"
     )
+
+    if 'expected_year' in case:
+        assert year == case['expected_year'], (
+            f"[{case['name']}] year mismatch\n"
+            f"  input   : {input_text}\n"
+            f"  expected: {case['expected_year']}\n"
+            f"  actual  : {year}"
+        )
 
 
 def run(cases, label):
