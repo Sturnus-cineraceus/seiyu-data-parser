@@ -29,6 +29,7 @@ EXCLUDE_MEDIA_EXACT = [
     "担当",
     "映画（吹き替え）",
     "吹き替え",
+    "音響制作",
     "テレビドラマ",
     "ドラマ",
     # Note: tokens that should be matched by substring or bounded rules are defined below

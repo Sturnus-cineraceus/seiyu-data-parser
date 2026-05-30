@@ -16,7 +16,7 @@ def _build_section_header_re(section_name: str) -> re.Pattern:
     names = [section_name]
     if section_name in {"出演", "出演作品"}:
         # Some pages use alternate headers for voice-actor credits or works listings.
-        names.extend(["出演（声優）", "出演(声優)", "出演作品"])
+        names.extend(["出演（声優）", "出演(声優)", "出演（声優業）", "出演(声優業)", "出演作品"])
     name_pattern = "|".join(re.escape(n) for n in dict.fromkeys(names))
     return re.compile(r'(?m)^(?P<underline>={2,})\s*(?:' + name_pattern + r')\s*(?P=underline)\s*$')
 

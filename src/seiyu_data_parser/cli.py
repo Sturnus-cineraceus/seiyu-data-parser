@@ -4,6 +4,7 @@ import os
 import sys
 import re
 import html
+import logging
 from urllib.parse import quote
 from typing import Any, Dict, List
 from .io import open_bz2
@@ -78,6 +79,18 @@ def _gender_from_categories(categories: List[str]) -> str | None:
         return "female"
     return None
 
+def _setup_import_logger() -> logging.Logger:
+    os.makedirs("logs", exist_ok=True)
+    logger = logging.getLogger("seiyu_import")
+    if logger.handlers:
+        return logger
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(os.path.join("logs", "import.log"), encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
+    return logger
+
 def parse_args():
     parser = argparse.ArgumentParser(description="seiyu data parser")
     parser.add_argument("path", help="Path to .bz2 file (Wikipedia multistream dump)")
@@ -87,6 +100,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    logger = _setup_import_logger()
+    exception_title = "高垣彩陽"
     # verify input file exists before attempting to open
     if not os.path.exists(args.path):
         print(f"Input file not found: {args.path}", file=sys.stderr)
@@ -111,11 +126,20 @@ def main():
             for page_xml in iter_pages(fh):
                 scanned += 1
                 title, cats, page_text = extract.extract_title_and_categories(page_xml)
-                if cats:
+                if "Category" in title:
+                    logger.warning("Skipped page because title contains Category: %s", title)
+                    if scanned >= max_scan:
+                        break
+                    continue
+
+                should_include = bool(cats) or title == exception_title
+                if should_include:
                     # parse template and appearances separately and combine simply
                     tpl = extract.parse_voice_template(page_xml)
                     works = extract.parse_appearances(page_xml, section_name="出演")
                     gender = _gender_from_categories(cats)
+                    if title == exception_title:
+                        gender = "female"
                     result_item: Dict[str, Any] = {
                         "name": _strip_parenthetical(title),
                         "canonical_name": title,
