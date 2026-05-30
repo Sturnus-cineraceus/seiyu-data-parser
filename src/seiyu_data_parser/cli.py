@@ -79,6 +79,10 @@ def _gender_from_categories(categories: List[str]) -> str | None:
         return "female"
     return None
 
+
+def _should_exclude_by_title(title: str) -> bool:
+    return "Category:" in (title or "")
+
 def _setup_import_logger() -> logging.Logger:
     os.makedirs("logs", exist_ok=True)
     logger = logging.getLogger("seiyu_import")
@@ -126,13 +130,17 @@ def main():
             for page_xml in iter_pages(fh):
                 scanned += 1
                 title, cats, page_text = extract.extract_title_and_categories(page_xml)
-                if "Category" in title:
-                    logger.warning("Skipped page because title contains Category: %s", title)
+                should_include = bool(cats) or title == exception_title
+                if should_include and _should_exclude_by_title(title):
+                    logger.warning(
+                        "Skipped page because title contains Category: title=%s categories=%s",
+                        title,
+                        ",".join(cats) if cats else "-",
+                    )
                     if scanned >= max_scan:
                         break
                     continue
 
-                should_include = bool(cats) or title == exception_title
                 if should_include:
                     # parse template and appearances separately and combine simply
                     tpl = extract.parse_voice_template(page_xml)
