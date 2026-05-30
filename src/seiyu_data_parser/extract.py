@@ -773,6 +773,15 @@ def parse_works_section(section_text: str, parent_level: int | None = None):
                 except Exception:
                     current_year = None
                 continue
+            # detect standalone year marker lines, including bold markup lines like "'''2004年'''"
+            marker = _clean_text(line.strip())
+            m_marker_year = heading_year_re.match(marker)
+            if m_marker_year:
+                try:
+                    current_year = int(m_marker_year.group(1))
+                except Exception:
+                    current_year = None
+                continue
             m_item = item_re.match(line)
             if not m_item:
                 continue

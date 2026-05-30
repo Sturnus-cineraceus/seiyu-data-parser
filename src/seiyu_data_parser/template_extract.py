@@ -5,7 +5,8 @@ import html
 from typing import Optional, Dict, Any, List
 
 TEMPLATE_RE = re.compile(r'\{\{声優(.*?)\}\}', re.S)
-FIELD_RE = re.compile(r'^\s*\|\s*([^=|]+?)\s*=\s*(.+)$', re.M)
+# Keep whitespace after '=' on the same line only; otherwise empty values can eat the next field line.
+FIELD_RE = re.compile(r'^\s*\|\s*([^=|]+?)\s*=[ \t]*(.*)$', re.M)
 LINK_RE = re.compile(r'\[\[(?:[^|\]]*\|)?([^\]]+)\]\]')
 URL_BRACKET_RE = re.compile(r'\[([^ ]+)(?: [^\]]+)?\]')
 # robust ref/tag remover: handles attributes, self-closing refs, and <br />

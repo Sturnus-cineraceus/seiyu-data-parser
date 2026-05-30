@@ -179,6 +179,14 @@ TARGET_CASES = [
         'expected_year': 1992,
     },
     {
+        'name': 'bold year marker line sets year for following items',
+        'mode': 'works_section',
+        'section_text': "=== テレビアニメ ===\n'''2004年'''\n* [[GANTZ|GANTZ 〜the first stage〜]]（'''加藤勝'''）\n",
+        'expected_title': 'GANTZ 〜the first stage〜',
+        'expected_roles': ['加藤勝'],
+        'expected_year': 2004,
+    },
+    {
         'name': 'pop team epic year range and in-parenthesis role with broadcast note',
         'mode': 'works_section',
         'section_text': "=== テレビアニメ ===\n* [[ポプテピピック]]（2018年 - 2021年、'''ポプ子'''〈第8話Bパート / 再放送・リミックス版第6話Bパート〉<ref>{{Cite web|和書|work=TVアニメ「ポプテピピック」公式サイト|title=キャスト|url=http://hoshiiro.jp/cast/|accessdate=2019-05-02}}</ref>）<!-- 2018-02-25 -->\n",

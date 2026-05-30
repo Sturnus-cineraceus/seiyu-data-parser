@@ -225,5 +225,5 @@ CLINE_RULES.md
 *.tmp
 .kilo/
 out_json
-voice_actor_new.sqlite
-voice_actor_test.sqlite
+*.sqlite
+*.sqlite3
